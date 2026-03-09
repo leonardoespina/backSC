@@ -1,0 +1,25 @@
+module.exports = {
+  ESTADOS_SOLICITUD: {
+    PENDIENTE: "PENDIENTE",
+    APROBADA: "APROBADA",
+    IMPRESA: "IMPRESA",
+    DESPACHADA: "DESPACHADA",
+    VENCIDA: "VENCIDA",
+    ANULADA: "ANULADA",
+  },
+
+  TIPOS_SUMINISTRO: {
+    BIDON: "BIDON",
+    REGULAR: "REGULAR",
+  },
+
+  TIPOS_SOLICITUD: {
+    VENTA: "VENTA",
+    ASIGNACION: "ASIGNACION",
+  },
+
+  PREFIJOS_TICKET: {
+    BIDON: "B",
+    REGULAR: "R",
+  },
+};

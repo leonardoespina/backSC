@@ -1,0 +1,21 @@
+# ==========================
+# NODE.JS / JAVASCRIPT (Vue, React, Next, etc.)
+# ==========================
+node_modules/
+dist/
+build/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.env
+*.rar
+*.zip
+.git/
+*.rar
+*.jar
+target/
+*copy.js
+*.old
