@@ -72,6 +72,9 @@ exports.imprimirTicket = async (req, res) => {
       req.usuario,
       req.ip,
     );
+    if (req.io && result && result.ticket && result.ticket.solicitud) {
+      req.io.emit("solicitud:actualizada", result.ticket.solicitud);
+    }
     res.json(result);
   } catch (error) {
     console.error("CRITICAL ERROR in imprimirTicket:", error);
@@ -108,6 +111,9 @@ exports.reimprimirTicket = async (req, res) => {
   const { id } = req.params;
   try {
     const result = await despachoService.reimprimirTicket(id);
+    if (req.io && result && result.ticket && result.ticket.solicitud) {
+      req.io.emit("solicitud:actualizada", result.ticket.solicitud);
+    }
     res.json(result);
   } catch (error) {
     console.error("CRITICAL ERROR in reimprimirTicket:", error);
@@ -129,8 +135,9 @@ exports.despacharSolicitud = async (req, res) => {
   try {
     const result = await despachoService.despacharSolicitud(req.body, req.ip);
 
-    if (req.io) req.io.emit("solicitud:despachada", result.solicitud);
-
+    if (req.io && result && result.solicitud) {
+      req.io.emit("solicitud:despachada", result.solicitud);
+    }
     res.json({ msg: result.msg });
   } catch (error) {
     console.error(error);

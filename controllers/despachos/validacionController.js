@@ -40,10 +40,7 @@ exports.finalizarTicket = async (req, res) => {
 
     // Notificar
     if (req.io) {
-      req.io.emit("solicitud:finalizada", {
-        id_solicitud: result.ticket.id_solicitud,
-        codigo: req.body.codigo_ticket,
-      });
+      req.io.emit("solicitud:actualizada", result.ticket);
       if (result.updatedCupoId) {
         req.io.emit("cupo:actualizado", {
           id_cupo_actual: result.updatedCupoId,
