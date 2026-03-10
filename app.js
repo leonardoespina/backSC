@@ -3,6 +3,7 @@
 const express = require("express");
 const cors = require("cors");
 const http = require("http");
+const helmet = require("helmet"); // Oculta x-powered-by y añade cabeceras seguras
 const { Server } = require("socket.io");
 const { dbConnect } = require("./config/database");
 require("dotenv").config();
@@ -128,6 +129,12 @@ dbConnect()
   });
 
 // Middlewares
+// 1. Capa de Seguridad (Helmet + Anti-bots)
+app.use(helmet());
+const { antiBotMiddleware } = require("./middlewares/securityMiddleware");
+app.use(antiBotMiddleware);
+
+// 2. CORS y Parseo de Body
 app.use(cors(corsOptions));
 // Aumentar el límite del body para soportar imágenes de huellas dactilares (Base64)
 app.use(express.json({ limit: "50mb" }));
