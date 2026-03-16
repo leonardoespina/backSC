@@ -54,14 +54,18 @@ exports.createSolicitud = async (data, user, clientIp) => {
     }
 
     // --- Normalizar datos según tipo de suministro ---
-    const esBidon = tipo_suministro === TIPOS_SUMINISTRO.BIDON;
+    // esBidon solo es true cuando es VENTA + BIDÓN (no requiere vehículo).
+    // INSTITUCIONAL + BIDÓN sí requiere vehículo y registra sus datos normalmente.
+    const esBidon =
+      tipo_suministro === TIPOS_SUMINISTRO.BIDON &&
+      tipo_solicitud === TIPOS_SOLICITUD.VENTA;
 
     const placaFinal = esBidon ? "NO APLICA" : placa;
     const marcaFinal = esBidon ? "NO APLICA" : marca;
     const modeloFinal = esBidon ? "NO APLICA" : modelo;
     const idVehiculoFinal = esBidon ? null : id_vehiculo;
 
-    // Validar placa presente para solicitudes REGULAR
+    // Validar placa presente para solicitudes que requieren vehículo (REGULAR o INSTITUCIONAL+BIDÓN)
     if (!esBidon && !placa) {
       throw new Error("La placa del vehículo es requerida");
     }
