@@ -307,6 +307,7 @@ exports.obtenerListaTanques = async (query) => {
       "tipo_tanque",
       "con_aforo",
       "id_tipo_combustible",
+      "activo_para_despacho",
     ],
     include: [
       { model: TipoCombustible, as: "TipoCombustible", attributes: ["nombre"] },
