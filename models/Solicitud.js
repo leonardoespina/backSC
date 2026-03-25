@@ -169,6 +169,11 @@ const Solicitud = sequelize.define(
       type: DataTypes.STRING(255),
       allowNull: true,
     },
+    ticket_snapshot: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      comment: "Snapshot inmutable de los datos del ticket al momento de impresión. Usado para re-impresiones fieles.",
+    },
   },
   {
     tableName: "solicitudes",

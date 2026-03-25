@@ -219,11 +219,13 @@ exports.imprimirTicket = async (data, user, clientIp) => {
     const correlativo = id_solicitud.toString().padStart(6, "0");
     const codigo_ticket = `${prefijo}${codDep}${correlativo}`;
 
+    const fechaImpresion = new Date();
+
     await solicitud.update(
       {
         estado: "IMPRESA",
         codigo_ticket,
-        fecha_impresion: new Date(),
+        fecha_impresion: fechaImpresion,
         numero_impresiones: 1,
         id_almacenista: user.id_usuario,
         id_receptor: matchReceptor.persona.id_biometria,
@@ -252,10 +254,43 @@ exports.imprimirTicket = async (data, user, clientIp) => {
       transaction: t,
     });
 
+    // --- Construir Snapshot Inmutable ---
+    const s = solicitudFull;
+    const hasPrice = !!s.PrecioCombustible;
+    const ticket_snapshot = {
+      codigo: codigo_ticket,
+      fecha_impresion: fechaImpresion.toISOString(),
+      fecha_impresion_string: moment(fechaImpresion).format("DD/MM/YYYY hh:mm:ss A"),
+      dependencia_codigo: s.Dependencia?.codigo || "S/C",
+      dependencia_nombre: s.Subdependencia?.nombre ? s.Subdependencia.nombre : (s.Dependencia?.nombre_dependencia || "S/D"),
+      subdependencia_nombre: s.Subdependencia?.nombre || "",
+      beneficiario_codigo: s.Dependencia?.codigo || "S/C", // Se mantiene el de Dependencia
+      solicitante_nombre: s.Solicitante ? `${s.Solicitante.nombre} ${s.Solicitante.apellido}` : "S/S",
+      renglon: s.TipoCombustible?.nombre || "S/R",
+      litros: parseFloat(s.cantidad_litros || 0),
+      hasPrice,
+      precio: hasPrice ? parseFloat(s.PrecioCombustible.precio || 0) : 0,
+      moneda: hasPrice ? (s.PrecioCombustible.Moneda?.nombre || "USD") : "USD",
+      llenadero: s.Llenadero?.nombre_llenadero || "S/L",
+      flota: s.flota || "NO APLICA",
+      placa: s.placa || "NO APLICA",
+      suministro: s.tipo_suministro === "BIDON" ? "Bidon" : "Regular",
+      autorizacion: s.Aprobador ? `${s.Aprobador.nombre} ${s.Aprobador.apellido}` : "S/A",
+      recibido: matchReceptor.persona.nombre || "S/R",
+      cedula: matchReceptor.persona.cedula || "S/I",
+      almacen: `${almacenistaSesion.nombre} ${almacenistaSesion.apellido}`,
+      operacion: s.Dependencia?.tipo_venta === "VENTA" ? "VENTA" : "LOCAL",
+      es_copia: false,
+    };
+
+    // Persistir snapshot en la solicitud
+    await solicitudFull.update({ ticket_snapshot }, { transaction: t });
+
     return {
       msg: "Ticket generado correctamente",
       ticket: {
         codigo: codigo_ticket,
+        snapshot: ticket_snapshot,
         solicitud: solicitudFull,
         receptor: matchReceptor.persona,
         almacenista: {
@@ -302,11 +337,18 @@ exports.reimprimirTicket = async (id_solicitud) => {
 
   await solicitudFull.increment("numero_impresiones");
 
+  // Construir snapshot de copia a partir del snapshot original (si existe) o datos relacionales
+  let snapshot_copia = null;
+  if (solicitudFull.ticket_snapshot) {
+    snapshot_copia = { ...solicitudFull.ticket_snapshot, es_copia: true };
+  }
+
   return {
     msg: "Copia generada",
     es_copia: true,
     ticket: {
       codigo: solicitudFull.codigo_ticket,
+      snapshot: snapshot_copia,
       solicitud: solicitudFull,
       receptor: solicitudFull.Receptor,
       almacenista: {
