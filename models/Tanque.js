@@ -89,6 +89,28 @@ const Tanque = sequelize.define(
   {
     tableName: "tanques",
     timestamps: false,
+    hooks: {
+      beforeValidate: (tanque, options) => {
+        const MARGEN_TOLERANCIA = 0.001; // Tolerancia del 1% para compensar errores de cálculo
+        const capMax = parseFloat(tanque.capacidad_maxima || 0);
+        const nivAct = parseFloat(tanque.nivel_actual || 0);
+
+        const limiteConMargen = capMax * (1 + MARGEN_TOLERANCIA);
+
+        if (nivAct > limiteConMargen) {
+          throw Object.assign(
+            new Error(`El nivel de reserva actual (${nivAct}) supera la capacidad física máxima configurada en el tanque (${limiteConMargen.toFixed(2)}).`),
+            { status: 400 }
+          );
+        }
+        if (nivAct < 0) {
+          throw Object.assign(
+            new Error("El nivel de reserva actual no puede ser negativo."),
+            { status: 400 }
+          );
+        }
+      }
+    }
   }
 );
 
