@@ -54,19 +54,19 @@ const Tanque = sequelize.define(
       defaultValue: "CM",
     },
     alto: {
-      type: DataTypes.DECIMAL(15, 3),
+      type: DataTypes.DECIMAL(15, 4),
       allowNull: true,
     },
     radio: {
-      type: DataTypes.DECIMAL(15, 3),
+      type: DataTypes.DECIMAL(15, 4),
       allowNull: true,
     },
     largo: {
-      type: DataTypes.DECIMAL(15, 3),
+      type: DataTypes.DECIMAL(15, 4),
       allowNull: true,
     },
     ancho: {
-      type: DataTypes.DECIMAL(15, 3),
+      type: DataTypes.DECIMAL(15, 4),
       allowNull: true,
     },
     estado: {
