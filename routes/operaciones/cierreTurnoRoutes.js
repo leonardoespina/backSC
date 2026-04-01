@@ -1,7 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const ctrl = require("../../controllers/operaciones/cierreTurnoController");
-const { autenticarUsuario } = require("../../middlewares/authMiddleware");
+const { autenticarUsuario, authorizePermission } = require("../../middlewares/authMiddleware");
+const { PERMISSIONS } = require("../../utils/permissions");
 
 router.use(autenticarUsuario);
 
@@ -17,7 +18,7 @@ router.get("/:id/reporte", ctrl.generarReporte);
 router.get("/:id/acta", ctrl.generarActaTurno);
 
 // Revertir Cierre (Regla de Oro: último cierre del llenadero + último movimiento por tanque)
-router.put("/:id/revertir", ctrl.revertirCierre);
+router.put("/:id/revertir", authorizePermission(PERMISSIONS.REVERTIR_OPERACION), ctrl.revertirCierre);
 
 module.exports = router;
 

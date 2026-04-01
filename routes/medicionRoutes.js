@@ -16,7 +16,7 @@ router.post("/", authorizePermission(PERMISSIONS.MANAGE_OPERACIONES_TANQUES), me
 // Actualizar Medición
 router.put("/:id", authorizePermission(PERMISSIONS.MANAGE_OPERACIONES_TANQUES), medicionController.actualizarMedicion);
 
-// Anular Medición
-router.put("/:id/anular", authorizePermission(PERMISSIONS.MANAGE_OPERACIONES_TANQUES), medicionController.anularMedicion);
+// Anular Medición (Revertir)
+router.put("/:id/anular", authorizePermission(PERMISSIONS.REVERTIR_OPERACION), medicionController.anularMedicion);
 
 module.exports = router;

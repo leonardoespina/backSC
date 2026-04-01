@@ -17,6 +17,6 @@ router.post("/", authorizePermission(PERMISSIONS.MANAGE_OPERACIONES_TANQUES), ca
 router.put("/:id", authorizePermission(PERMISSIONS.MANAGE_OPERACIONES_TANQUES), cargaCisternaController.actualizarCarga);
 
 // Revertir Carga (Regla de Oro: solo si es el último movimiento de cada tanque)
-router.put("/:id/revertir", authorizePermission(PERMISSIONS.MANAGE_OPERACIONES_TANQUES), cargaCisternaController.revertirCarga);
+router.put("/:id/revertir", authorizePermission(PERMISSIONS.REVERTIR_OPERACION), cargaCisternaController.revertirCarga);
 
 module.exports = router;

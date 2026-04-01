@@ -21,6 +21,7 @@ const PERMISSIONS = {
     MANAGE_USERS: "manage_users",
     MANAGE_SYSTEM: "manage_system",
     REJECT_SOLICITUD: "reject_solicitud",
+    REVERTIR_OPERACION: "revertir_operacion",
 };
 
 const ROLE_PERMISSIONS = {
@@ -106,6 +107,15 @@ function hasPermission(user, permission) {
     if (permission === PERMISSIONS.REJECT_SOLICITUD) {
         // Solo AMBOS puede rechazar (según nueva regla de negocio)
         return user.capacidad_solicitudes === "AMBOS";
+    }
+
+    if (permission === PERMISSIONS.REVERTIR_OPERACION) {
+        // Solo ADMIN o AMBOS pueden revertir
+        return (
+            user.tipo_usuario === "ADMIN" ||
+            user.rol_sistema === "ADMIN" ||
+            user.capacidad_solicitudes === "AMBOS"
+        );
     }
 
     if (permission === PERMISSIONS.CREATE_SOLICITUD) {

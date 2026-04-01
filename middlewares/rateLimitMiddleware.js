@@ -43,7 +43,7 @@ const ddosLimiter = rateLimit({
 // 2. LOGIN — POR IP + CÉDULA (sin token aún)
 // ──────────────────────────────────────────────────────────────
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 2 * 60 * 1000,
   max: 5,
   skipSuccessfulRequests: true,
   keyGenerator: (req) => `login_${ipKeyGenerator(req)}_${req.body?.cedula || ''}`,
@@ -52,7 +52,7 @@ const loginLimiter = rateLimit({
   handler: (req, res) => {
     console.warn(`⚠️  Rate-limit LOGIN - Cédula: ${req.body?.cedula || 'N/A'}`);
     res.status(429).json({
-      msg: 'Demasiados intentos de inicio de sesión. Intente nuevamente en 15 minutos.',
+      msg: 'Demasiados intentos de inicio de sesión. Intente nuevamente en 2 minutos.',
       tipo: 'RATE_LIMIT_LOGIN',
       retry_after: Math.ceil(req.rateLimit.resetTime / 1000),
     });
