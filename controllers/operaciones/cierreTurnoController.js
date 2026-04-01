@@ -138,3 +138,44 @@ exports.generarActaTurno = async (req, res) => {
         res.status(500).json({ msg: error.message });
     }
 };
+
+/**
+ * PUT /cierres-turno/:id/revertir
+ *
+ * Revierte el cierre si cumple todas las condiciones de la Regla de Oro:
+ * - Es el último cierre del llenadero
+ * - Los tanques medidos no tienen movimientos posteriores
+ *
+ * Desvincula despachos y movimientos, restaura niveles de tanques
+ * y marca el cierre como ANULADO.
+ */
+exports.revertirCierre = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await svc.revertirCierre(id, req.clientIp || req.ip);
+        const { cierre, tanquesRestaurados } = result;
+
+        if (req.io) {
+            tanquesRestaurados.forEach(({ id_tanque, nivelRestaurado }) => {
+                emitCierre(req.io, "tanque:actualizado", { id_tanque, nivel_actual: nivelRestaurado });
+            });
+            emitCierre(req.io, "cierre:actualizado", {
+                id_cierre: cierre.id_cierre,
+                estado: cierre.estado,
+            });
+        }
+
+        res.json({
+            msg: `Cierre #${cierre.id_cierre} revertido. ${tanquesRestaurados.length} tanque(s) restaurados. Los despachos quedan pendientes de reasignación.`,
+            data: { cierre, tanquesRestaurados },
+        });
+    } catch (error) {
+        console.error("Error en revertirCierre:", error);
+        const status = error.statusCode || 500;
+        if (status === 404) return res.status(404).json({ msg: error.message });
+        if (status === 400) return res.status(400).json({ msg: error.message });
+        if (status === 409) return res.status(409).json({ msg: error.message });
+        res.status(500).json({ msg: "Error al revertir el cierre de turno." });
+    }
+};
+

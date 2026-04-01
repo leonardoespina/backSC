@@ -1,5 +1,6 @@
 const {
   TransferenciaInterna,
+  MovimientoInventario,
   Tanque,
   Usuario,
   Llenadero,
@@ -67,6 +68,41 @@ exports.crearTransferencia = async (data, user, clientIp) => {
     );
     await tanqueDestino.update(
       { nivel_actual: nivel_destino_despues },
+      { transaction: t },
+    );
+
+    // Registrar trazabilidad en el ledger central de inventario
+    await MovimientoInventario.create(
+      {
+        id_tanque: id_tanque_origen,
+        id_cierre_turno: null,
+        tipo_movimiento: "TRANSFERENCIA_SALIDA",
+        id_referencia: nuevaTransferencia.id_transferencia,
+        tabla_referencia: "transferencias_internas",
+        volumen_antes: nivel_origen_antes,
+        volumen_despues: nivel_origen_despues,
+        variacion: parseFloat((-v_transferido).toFixed(2)),
+        fecha_movimiento: new Date(),
+        id_usuario,
+        observaciones: `Transferencia hacia Tanque ID: ${id_tanque_destino}`,
+      },
+      { transaction: t },
+    );
+
+    await MovimientoInventario.create(
+      {
+        id_tanque: id_tanque_destino,
+        id_cierre_turno: null,
+        tipo_movimiento: "TRANSFERENCIA_ENTRADA",
+        id_referencia: nuevaTransferencia.id_transferencia,
+        tabla_referencia: "transferencias_internas",
+        volumen_antes: nivel_destino_antes,
+        volumen_despues: nivel_destino_despues,
+        variacion: parseFloat(v_transferido.toFixed(2)),
+        fecha_movimiento: new Date(),
+        id_usuario,
+        observaciones: `Transferencia desde Tanque ID: ${id_tanque_origen}`,
+      },
       { transaction: t },
     );
 
@@ -205,3 +241,98 @@ exports.obtenerTransferenciaPorId = async (id) => {
 
   return transferencia;
 };
+
+/**
+ * Revertir Transferencia Interna
+ *
+ * Regla de Oro: El último movimiento de inventario de AMBOS tanques
+ * (origen y destino) debe corresponder a esta transferencia.
+ * Si uno solo tiene movimientos posteriores, se rechaza la operación completa.
+ *
+ * Acción atómica:
+ *  1. Cambia estado de TransferenciaInterna → "ANULADA"
+ *  2. Restaura nivel_actual de tanque origen (suma lo que salió)
+ *  3. Restaura nivel_actual de tanque destino (resta lo que entró)
+ *  4. Elimina los dos registros de MovimientoInventario
+ */
+exports.revertirTransferencia = async (id, clientIp) => {
+  return await executeTransaction(clientIp, async (t) => {
+    // 1. Cargar la transferencia
+    const transferencia = await TransferenciaInterna.findByPk(id, {
+      transaction: t,
+    });
+
+    if (!transferencia) {
+      const err = new Error("Transferencia no encontrada.");
+      err.statusCode = 404;
+      throw err;
+    }
+    if (transferencia.estado === "ANULADA") {
+      const err = new Error("La transferencia ya se encuentra anulada.");
+      err.statusCode = 400;
+      throw err;
+    }
+
+    // 2. Buscar el último movimiento de cada tanque (Regla de Oro)
+    const [ultimoOrigen, ultimoDestino] = await Promise.all([
+      MovimientoInventario.findOne({
+        where: { id_tanque: transferencia.id_tanque_origen },
+        order: [["id_movimiento", "DESC"]],
+        transaction: t,
+      }),
+      MovimientoInventario.findOne({
+        where: { id_tanque: transferencia.id_tanque_destino },
+        order: [["id_movimiento", "DESC"]],
+        transaction: t,
+      }),
+    ]);
+
+    const esMismaTransferencia = (mov) =>
+      mov &&
+      mov.id_referencia === transferencia.id_transferencia &&
+      mov.tabla_referencia === "transferencias_internas";
+
+    if (!esMismaTransferencia(ultimoOrigen)) {
+      const err = new Error(
+        `No se puede revertir. El Tanque origen (ID ${transferencia.id_tanque_origen}) tiene ` +
+          `movimientos de inventario posteriores a esta transferencia.`
+      );
+      err.statusCode = 409;
+      throw err;
+    }
+    if (!esMismaTransferencia(ultimoDestino)) {
+      const err = new Error(
+        `No se puede revertir. El Tanque destino (ID ${transferencia.id_tanque_destino}) tiene ` +
+          `movimientos de inventario posteriores a esta transferencia.`
+      );
+      err.statusCode = 409;
+      throw err;
+    }
+
+    // 3. Restaurar niveles de ambos tanques
+    const [tanqueOrigen, tanqueDestino] = await Promise.all([
+      Tanque.findByPk(transferencia.id_tanque_origen, { transaction: t, lock: true }),
+      Tanque.findByPk(transferencia.id_tanque_destino, { transaction: t, lock: true }),
+    ]);
+
+    const nivelOrigenRestaurado = parseFloat(ultimoOrigen.volumen_antes);
+    const nivelDestinoRestaurado = parseFloat(ultimoDestino.volumen_antes);
+
+    await tanqueOrigen.update({ nivel_actual: nivelOrigenRestaurado }, { transaction: t });
+    await tanqueDestino.update({ nivel_actual: nivelDestinoRestaurado }, { transaction: t });
+
+    // 4. Marcar la transferencia como ANULADA y limpiar el ledger
+    await transferencia.update({ estado: "ANULADA" }, { transaction: t });
+    await ultimoOrigen.destroy({ transaction: t });
+    await ultimoDestino.destroy({ transaction: t });
+
+    return {
+      transferencia,
+      id_tanque_origen: transferencia.id_tanque_origen,
+      id_tanque_destino: transferencia.id_tanque_destino,
+      nivelOrigenRestaurado,
+      nivelDestinoRestaurado,
+    };
+  });
+};
+

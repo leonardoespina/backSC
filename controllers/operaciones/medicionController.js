@@ -51,28 +51,32 @@ exports.listarMediciones = async (req, res) => {
 };
 
 /**
- * anularMedicion
- * Cambia el estado a ANULADO.
+ * anularMedicion (Revertir)
+ * Revierte la medición si y solo si es el último movimiento del tanque.
+ * Restaura el nivel_actual y elimina el registro de MovimientoInventario.
  */
 exports.anularMedicion = async (req, res) => {
   const { id } = req.params;
   try {
-    const medicion = await medicionService.anularMedicion(id, req.ip);
+    const result = await medicionService.revertirMedicion(id, req.ip);
+    const { medicion, nivelRestaurado, id_tanque } = result;
 
-    if (req.io) req.io.emit("medicion:actualizada", medicion);
+    if (req.io) {
+      req.io.emit("tanque:actualizado", { id_tanque, nivel_actual: nivelRestaurado });
+      req.io.emit("medicion:actualizada", medicion);
+    }
 
-    res.json({ msg: "Medición anulada correctamente." });
+    res.json({ msg: "Medición revertida correctamente. Nivel del tanque restaurado.", data: medicion });
   } catch (error) {
     console.error("Error en anularMedicion:", error);
-    if (error.message.includes("no encontrada")) {
-      return res.status(404).json({ msg: error.message });
-    }
-    if (error.message.includes("ya se encuentra anulada")) {
-      return res.status(400).json({ msg: error.message });
-    }
-    res.status(500).json({ msg: "Error al anular la medición." });
+    const status = error.statusCode || 500;
+    if (status === 404) return res.status(404).json({ msg: error.message });
+    if (status === 400) return res.status(400).json({ msg: error.message });
+    if (status === 409) return res.status(409).json({ msg: error.message });
+    res.status(500).json({ msg: "Error al revertir la medición." });
   }
 };
+
 
 /**
  * actualizarMedicion

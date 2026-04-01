@@ -55,7 +55,7 @@ const TransferenciaInterna = sequelize.define(
       allowNull: true,
     },
     estado: {
-      type: DataTypes.ENUM("PROCESADO", "MODIFICADO"),
+      type: DataTypes.ENUM("PROCESADO", "MODIFICADO", "ANULADO", "ANULADA"),
       defaultValue: "PROCESADO",
     },
     fecha_registro: {

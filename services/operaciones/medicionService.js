@@ -137,22 +137,70 @@ exports.listarMediciones = async (query) => {
 };
 
 /**
- * Anular Medición
+ * Revertir Medición Ordinaria
+ *
+ * Regla de Oro: Solo se puede revertir si este movimiento es el ÚLTIMO
+ * que afectó al tanque en la tabla movimientos_inventario.
+ *
+ * Acción atómica:
+ *  1. Cambia estado de MedicionTanque → "ANULADO"
+ *  2. Restaura Tanque.nivel_actual al valor previo a la medición
+ *  3. Elimina el registro de MovimientoInventario asociado
  */
-exports.anularMedicion = async (id, clientIp) => {
+exports.revertirMedicion = async (id, clientIp) => {
   return await executeTransaction(clientIp, async (t) => {
+    // 1. Cargar la medición
     const medicion = await MedicionTanque.findByPk(id, { transaction: t });
     if (!medicion) throw new Error("Medición no encontrada.");
-
     if (medicion.estado === "ANULADO") {
       throw new Error("La medición ya se encuentra anulada.");
     }
+    if (medicion.tipo_medicion === "CIERRE") {
+      const err = new Error(
+        "Las mediciones de tipo CIERRE deben revertirse desde el módulo de Cierre de Turno."
+      );
+      err.statusCode = 400;
+      throw err;
+    }
 
+    // 2. Validar: debe ser el último movimiento del tanque (Regla de Oro)
+    const ultimoMovimiento = await MovimientoInventario.findOne({
+      where: { id_tanque: medicion.id_tanque },
+      order: [["id_movimiento", "DESC"]],
+      transaction: t,
+    });
+
+    if (
+      !ultimoMovimiento ||
+      ultimoMovimiento.id_referencia !== medicion.id_medicion ||
+      ultimoMovimiento.tabla_referencia !== "mediciones_tanque"
+    ) {
+      const err = new Error(
+        "No se puede revertir. Existen movimientos de inventario posteriores en este tanque. " +
+          "Debe revertir el último movimiento primero."
+      );
+      err.statusCode = 409;
+      throw err;
+    }
+
+    // 3. Restaurar nivel_actual del tanque al valor previo
+    const tanque = await Tanque.findByPk(medicion.id_tanque, {
+      transaction: t,
+      lock: true,
+    });
+    const nivelRestaurado = parseFloat(ultimoMovimiento.volumen_antes);
+    await tanque.update({ nivel_actual: nivelRestaurado }, { transaction: t });
+
+    // 4. Marcar medición como ANULADA
     await medicion.update({ estado: "ANULADO" }, { transaction: t });
 
-    return medicion;
+    // 5. Eliminar el registro del ledger de inventario
+    await ultimoMovimiento.destroy({ transaction: t });
+
+    return { medicion, nivelRestaurado, id_tanque: medicion.id_tanque };
   });
 };
+
 
 /**
  * Actualizar Medición

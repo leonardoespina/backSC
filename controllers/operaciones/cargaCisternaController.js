@@ -81,3 +81,36 @@ exports.actualizarCarga = async (req, res) => {
     res.status(500).json({ msg: "Error al actualizar la carga." });
   }
 };
+
+/**
+ * revertirCarga
+ * Revierte la carga de cisterna, restaura niveles de todos los tanques
+ * afectados y elimina sus registros de MovimientoInventario.
+ */
+exports.revertirCarga = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await cargaCisternaService.revertirCarga(id, req.ip);
+    const { carga, tanquesAfectados } = result;
+
+    if (req.io) {
+      tanquesAfectados.forEach(({ id_tanque, nivelRestaurado }) => {
+        req.io.emit("tanque:actualizado", { id_tanque, nivel_actual: nivelRestaurado });
+      });
+      req.io.emit("carga:actualizada", carga);
+    }
+
+    res.json({
+      msg: `Carga de cisterna revertida. ${tanquesAfectados.length} tanque(s) restaurados.`,
+      data: { carga, tanquesAfectados },
+    });
+  } catch (error) {
+    console.error("Error en revertirCarga:", error);
+    const status = error.statusCode || 500;
+    if (status === 404) return res.status(404).json({ msg: error.message });
+    if (status === 400) return res.status(400).json({ msg: error.message });
+    if (status === 409) return res.status(409).json({ msg: error.message });
+    res.status(500).json({ msg: "Error al revertir la carga de cisterna." });
+  }
+};
+

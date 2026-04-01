@@ -111,7 +111,7 @@ const CargaCisterna = sequelize.define(
       comment: "Array con la tabla de aforo utilizada para validar esta carga",
     },
     estado: {
-      type: DataTypes.ENUM("PROCESADO", "ANULADO"),
+      type: DataTypes.ENUM("PROCESADO", "ANULADO", "ANULADA"),
       defaultValue: "PROCESADO",
     },
     id_usuario_registro: {

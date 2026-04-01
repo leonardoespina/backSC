@@ -16,4 +16,8 @@ router.get("/:id", ctrl.obtenerCierre);
 router.get("/:id/reporte", ctrl.generarReporte);
 router.get("/:id/acta", ctrl.generarActaTurno);
 
+// Revertir Cierre (Regla de Oro: último cierre del llenadero + último movimiento por tanque)
+router.put("/:id/revertir", ctrl.revertirCierre);
+
 module.exports = router;
+

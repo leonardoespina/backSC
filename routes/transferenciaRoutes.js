@@ -19,4 +19,7 @@ router.post("/", authorizePermission(PERMISSIONS.MANAGE_OPERACIONES_TANQUES), tr
 // Actualizar (Solo observaciones)
 router.put("/:id", authorizePermission(PERMISSIONS.MANAGE_OPERACIONES_TANQUES), transferenciaController.actualizarTransferencia);
 
+// Revertir Transferencia (Regla de Oro: solo si es el último movimiento de AMBOS tanques)
+router.put("/:id/revertir", authorizePermission(PERMISSIONS.MANAGE_OPERACIONES_TANQUES), transferenciaController.revertirTransferencia);
+
 module.exports = router;

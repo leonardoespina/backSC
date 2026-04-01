@@ -108,3 +108,41 @@ exports.obtenerTransferenciaPorId = async (req, res) => {
     res.status(500).json({ msg: "Error al obtener detalle." });
   }
 };
+
+/**
+ * revertirTransferencia
+ * Revierte la transferencia si y solo si es el último movimiento
+ * de AMBOS tanques involucrados. Restaura los niveles y limpia el ledger.
+ */
+exports.revertirTransferencia = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await transferenciaService.revertirTransferencia(id, req.ip);
+    const {
+      transferencia,
+      id_tanque_origen,
+      id_tanque_destino,
+      nivelOrigenRestaurado,
+      nivelDestinoRestaurado,
+    } = result;
+
+    if (req.io) {
+      req.io.emit("tanque:actualizado", { id_tanque: id_tanque_origen, nivel_actual: nivelOrigenRestaurado });
+      req.io.emit("tanque:actualizado", { id_tanque: id_tanque_destino, nivel_actual: nivelDestinoRestaurado });
+      req.io.emit("transferencia:actualizada", transferencia);
+    }
+
+    res.json({
+      msg: "Transferencia interna revertida correctamente. Niveles de tanques restaurados.",
+      data: result,
+    });
+  } catch (error) {
+    console.error("Error en revertirTransferencia:", error);
+    const status = error.statusCode || 500;
+    if (status === 404) return res.status(404).json({ msg: error.message });
+    if (status === 400) return res.status(400).json({ msg: error.message });
+    if (status === 409) return res.status(409).json({ msg: error.message });
+    res.status(500).json({ msg: "Error al revertir la transferencia interna." });
+  }
+};
+

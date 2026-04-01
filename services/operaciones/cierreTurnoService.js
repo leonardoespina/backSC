@@ -717,3 +717,139 @@ exports.generarActaTurno = async (id_cierre) => {
     };
 };
 
+/**
+ * Revertir Cierre de Turno
+ *
+ * Condiciones requeridas:
+ *  a) El cierre debe estar en estado "CERRADO"
+ *  b) Debe ser el ÚLTIMO cierre del llenadero
+ *  c) Por cada tanque medido, el último movimiento del ledger debe ser
+ *     el AJUSTE_MEDICION de este cierre (Regla de Oro)
+ *
+ * Acción atómica:
+ *  1. Desvincula Solicitudes → id_cierre_turno = NULL
+ *  2. Desvincula movimientos de despacho/cisterna → id_cierre_turno = NULL
+ *  3. Por cada tanque: restaura nivel, anula MedicionTanque, destruye el ajuste
+ *  4. Marca CierreTurno → estado "ANULADO"
+ */
+exports.revertirCierre = async (id_cierre, clientIp) => {
+    return await executeTransaction(clientIp, async (t) => {
+        // 1. Cargar el cierre con sus mediciones detalladas
+        const cierre = await CierreTurno.findByPk(id_cierre, {
+            include: [
+                {
+                    model: CierreTurnoMedicion,
+                    as: "Mediciones",
+                    include: [
+                        {
+                            model: MedicionTanque,
+                            as: "MedicionCierre",
+                            attributes: ["id_medicion", "estado", "tipo_medicion", "id_tanque"],
+                        },
+                    ],
+                },
+            ],
+            transaction: t,
+        });
+
+        if (!cierre) {
+            const err = new Error("Cierre de turno no encontrado.");
+            err.statusCode = 404;
+            throw err;
+        }
+        if (cierre.estado === "ANULADO") {
+            const err = new Error("El cierre de turno ya se encuentra anulado.");
+            err.statusCode = 400;
+            throw err;
+        }
+
+        // 2. Verificar que sea el ÚLTIMO cierre del llenadero
+        const ultimoCierre = await CierreTurno.findOne({
+            where: { id_llenadero: cierre.id_llenadero, estado: "CERRADO" },
+            order: [["id_cierre", "DESC"]],
+            transaction: t,
+        });
+
+        if (!ultimoCierre || ultimoCierre.id_cierre !== cierre.id_cierre) {
+            const err = new Error(
+                `No se puede revertir. Existen cierres posteriores para este llenadero. ` +
+                    `Debe revertir el cierre #${ultimoCierre?.id_cierre} primero.`
+            );
+            err.statusCode = 409;
+            throw err;
+        }
+
+        // 3. Validar la Regla de Oro por cada tanque medido en el cierre
+        const ajustesACancelar = [];
+        for (const detalleMedicion of cierre.Mediciones) {
+            const ultimoMovimiento = await MovimientoInventario.findOne({
+                where: { id_tanque: detalleMedicion.id_tanque },
+                order: [["id_movimiento", "DESC"]],
+                transaction: t,
+            });
+
+            if (
+                !ultimoMovimiento ||
+                ultimoMovimiento.id_cierre_turno !== cierre.id_cierre ||
+                ultimoMovimiento.tipo_movimiento !== "AJUSTE_MEDICION"
+            ) {
+                const err = new Error(
+                    `No se puede revertir. El Tanque ID ${detalleMedicion.id_tanque} tiene ` +
+                        `movimientos de inventario posteriores al cierre. Revierte esas operaciones primero.`
+                );
+                err.statusCode = 409;
+                throw err;
+            }
+            ajustesACancelar.push({ detalleMedicion, ajuste: ultimoMovimiento });
+        }
+
+        // 4. Desvincular Solicitudes del cierre (quedan pendientes de reasignación)
+        await Solicitud.update(
+            { id_cierre_turno: null },
+            { where: { id_cierre_turno: id_cierre }, transaction: t }
+        );
+
+        // 5. Desvincular movimientos de despacho/cisterna (excluye AJUSTE_MEDICION que se destruyen)
+        await MovimientoInventario.update(
+            { id_cierre_turno: null },
+            {
+                where: {
+                    id_cierre_turno: id_cierre,
+                    tipo_movimiento: { [Op.ne]: "AJUSTE_MEDICION" },
+                },
+                transaction: t,
+            }
+        );
+
+        // 6. Por cada tanque medido: restaurar nivel, anular medición y limpiar ledger
+        const tanquesRestaurados = [];
+        for (const { detalleMedicion, ajuste } of ajustesACancelar) {
+            const tanque = await Tanque.findByPk(detalleMedicion.id_tanque, {
+                transaction: t,
+                lock: true,
+            });
+            const nivelRestaurado = parseFloat(ajuste.volumen_antes);
+            await tanque.update({ nivel_actual: nivelRestaurado }, { transaction: t });
+
+            if (detalleMedicion.MedicionCierre) {
+                await MedicionTanque.update(
+                    { estado: "ANULADO" },
+                    {
+                        where: { id_medicion: detalleMedicion.MedicionCierre.id_medicion },
+                        transaction: t,
+                    }
+                );
+            }
+
+            await ajuste.destroy({ transaction: t });
+            tanquesRestaurados.push({ id_tanque: detalleMedicion.id_tanque, nivelRestaurado });
+        }
+
+        // 7. Marcar el cierre como ANULADO
+        await cierre.update({ estado: "ANULADO" }, { transaction: t });
+
+        return { cierre, tanquesRestaurados };
+    });
+};
+
+

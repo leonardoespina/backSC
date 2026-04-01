@@ -219,3 +219,84 @@ exports.actualizarCarga = async (id, data, clientIp) => {
     return { carga };
   });
 };
+
+/**
+ * Revertir Carga de Cisterna
+ *
+ * Regla de Oro: Para cada tanque afectado por la carga, el último
+ * movimiento de inventario debe ser el de esta carga. Si algún tanque
+ * tiene movimientos posteriores, se rechaza la operación completa.
+ *
+ * Acción atómica:
+ *  1. Cambia estado de CargaCisterna → "ANULADA"
+ *  2. Por cada tanque: restaura nivel_actual al valor previo a la recepción
+ *  3. Elimina todos los registros de MovimientoInventario de esta carga
+ */
+exports.revertirCarga = async (id, clientIp) => {
+  return await executeTransaction(clientIp, async (t) => {
+    // 1. Cargar cabecera + detalle de tanques
+    const carga = await CargaCisterna.findByPk(id, {
+      include: [
+        {
+          model: CargaCisternaTanque,
+          as: "tanques_descarga",
+        },
+      ],
+      transaction: t,
+    });
+
+    if (!carga) {
+      const err = new Error("Carga de cisterna no encontrada.");
+      err.statusCode = 404;
+      throw err;
+    }
+    if (carga.estado === "ANULADA") {
+      const err = new Error("La carga de cisterna ya se encuentra anulada.");
+      err.statusCode = 400;
+      throw err;
+    }
+
+    // 2. Validar la Regla de Oro por cada tanque involucrado
+    const movimientosACancelar = [];
+    for (const detalle of carga.tanques_descarga) {
+      const ultimoMovimiento = await MovimientoInventario.findOne({
+        where: { id_tanque: detalle.id_tanque },
+        order: [["id_movimiento", "DESC"]],
+        transaction: t,
+      });
+
+      if (
+        !ultimoMovimiento ||
+        ultimoMovimiento.id_referencia !== carga.id_carga ||
+        ultimoMovimiento.tabla_referencia !== "cargas_cisternas"
+      ) {
+        const err = new Error(
+          `No se puede revertir. El Tanque ID ${detalle.id_tanque} tiene movimientos de inventario ` +
+            `posteriores a esta carga. Revierte esos movimientos primero.`
+        );
+        err.statusCode = 409;
+        throw err;
+      }
+      movimientosACancelar.push({ detalle, movimiento: ultimoMovimiento });
+    }
+
+    // 3. Aplicar reversión atómica para cada tanque
+    const tanquesAfectados = [];
+    for (const { detalle, movimiento } of movimientosACancelar) {
+      const tanque = await Tanque.findByPk(detalle.id_tanque, {
+        transaction: t,
+        lock: true,
+      });
+      const nivelRestaurado = parseFloat(movimiento.volumen_antes);
+      await tanque.update({ nivel_actual: nivelRestaurado }, { transaction: t });
+      await movimiento.destroy({ transaction: t });
+      tanquesAfectados.push({ id_tanque: detalle.id_tanque, nivelRestaurado });
+    }
+
+    // 4. Marcar la carga como ANULADA
+    await carga.update({ estado: "ANULADA" }, { transaction: t });
+
+    return { carga, tanquesAfectados };
+  });
+};
+

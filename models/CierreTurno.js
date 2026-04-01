@@ -54,7 +54,7 @@ const CierreTurno = sequelize.define(
         estado: {
             type: DataTypes.STRING(20),
             defaultValue: "PENDIENTE",
-            validate: { isIn: [["PENDIENTE", "CERRADO"]] },
+            validate: { isIn: [["PENDIENTE", "CERRADO", "ANULADO"]] },
         },
         observaciones: {
             type: DataTypes.TEXT,
