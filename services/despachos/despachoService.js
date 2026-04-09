@@ -114,19 +114,17 @@ exports.validarFirma = async (cedula, huella, id_solicitud, validar_pertenencia 
     );
   }
 
-  // Validar Pertenencia estricta (dependencia + subdependencia) — solo para el Solicitante
+  // Validar Pertenencia estricta (solo para el Solicitante)
+  // Nota: Se elimina la validación de id_dependencia para permitir que una
+  // persona de PCP pueda despachar por otra dependencia si tiene asignada su subdependencia.
   if (validar_pertenencia && (registro.rol === "RETIRO" || registro.rol === "AMBOS")) {
-    if (registro.id_dependencia !== solicitud.id_dependencia) {
-      throw new Error(
-        "El receptor no pertenece a la dependencia de la solicitud.",
-      );
-    }
-
+    
     // Validar subdependencia contra el array M:N
     const subdependenciasIds = (registro.Subdependencias || []).map(
-      (s) => s.id_subdependencia
+      (s) => String(s.id_subdependencia)
     );
-    if (!subdependenciasIds.includes(solicitud.id_subdependencia)) {
+    
+    if (!subdependenciasIds.includes(String(solicitud.id_subdependencia))) {
       throw new Error(
         "El receptor no está autorizado para la subdependencia de esta solicitud.",
       );
@@ -221,9 +219,10 @@ exports.imprimirTicket = async (data, user, clientIp) => {
 
     // Validar que el receptor esté autorizado para la subdependencia de esta solicitud (M:N)
     const receptorSubIds = (matchReceptor.persona.Subdependencias || []).map(
-      (s) => s.id_subdependencia
+      (s) => String(s.id_subdependencia)
     );
-    if (!receptorSubIds.includes(solicitud.id_subdependencia)) {
+
+    if (!receptorSubIds.includes(String(solicitud.id_subdependencia))) {
       throw new Error(
         "El receptor no está autorizado para la subdependencia de esta solicitud.",
       );
