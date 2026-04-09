@@ -132,3 +132,14 @@ exports.verificarConexionMicroservicio = async (req, res) => {
     res.status(503).json(error);
   }
 };
+
+// --- MIGRACIÓN ONE-SHOT: id_subdependencia → tabla pivot ---
+exports.migrarSubdependencias = async (req, res) => {
+  try {
+    const result = await biometriaService.migrarSubdependenciasExistentes();
+    res.json(result);
+  } catch (error) {
+    console.error("Error en migrarSubdependencias:", error);
+    res.status(500).json({ msg: "Error ejecutando migración", detalle: error.message });
+  }
+};

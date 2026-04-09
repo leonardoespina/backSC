@@ -59,9 +59,17 @@ const Biometria = sequelize.define(
 );
 
 Biometria.associate = (models) => {
-  Biometria.belongsTo(models.Categoria, { foreignKey: "id_categoria", as: "Categoria" });
+  Biometria.belongsTo(models.Categoria,   { foreignKey: "id_categoria",   as: "Categoria"   });
   Biometria.belongsTo(models.Dependencia, { foreignKey: "id_dependencia", as: "Dependencia" });
-  Biometria.belongsTo(models.Subdependencia, { foreignKey: "id_subdependencia", as: "Subdependencia" });
+
+  // Relación M:N con Subdependencia a través de la tabla pivot biometria_subdependencias
+  // Una persona biométrica puede estar autorizada para operar en múltiples subdependencias
+  Biometria.belongsToMany(models.Subdependencia, {
+    through: "biometria_subdependencias",
+    foreignKey: "id_biometria",
+    otherKey: "id_subdependencia",
+    as: "Subdependencias",
+  });
 };
 
 module.exports = Biometria;

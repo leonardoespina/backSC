@@ -25,6 +25,57 @@ console.log(
 );
 
 /**
+ * Migración automática: mueve id_subdependencia de la tabla biometria
+ * a la nueva tabla pivot biometria_subdependencias para registros existentes.
+ * Se ejecuta una vez al arrancar el servidor.
+ */
+exports.migrarSubdependenciasExistentes = async () => {
+  try {
+    const { sequelize } = require("../../config/database");
+
+    // Registros que tienen id_subdependencia antiguo pero no tienen fila en el pivot
+    const [registros] = await sequelize.query(`
+      SELECT b.id_biometria, b.id_subdependencia
+      FROM biometria b
+      WHERE b.id_subdependencia IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM biometria_subdependencias bs
+          WHERE bs.id_biometria = b.id_biometria
+        )
+    `);
+
+    if (registros.length === 0) {
+      console.log("✅ Migración M:N biometría: no hay registros pendientes.");
+      return { msg: "No hay registros pendientes para migrar", migrados: 0 };
+    }
+
+    // Insertar en la tabla pivot con timestamps
+    const values = registros
+      .map((r) => `(${r.id_biometria}, ${r.id_subdependencia}, NOW(), NOW())`)
+      .join(", ");
+
+    await sequelize.query(`
+      INSERT INTO biometria_subdependencias (id_biometria, id_subdependencia, "createdAt", "updatedAt")
+      VALUES ${values}
+      ON CONFLICT DO NOTHING
+    `);
+
+    console.log(`✅ Migración M:N biometría: ${registros.length} registro(s) migrado(s) al pivot.`);
+    return { msg: "Migración completada con éxito", migrados: registros.length };
+  } catch (error) {
+    console.error("⚠️ Migración M:N biometría falló (no crítico):", error.message);
+    // Removemos el throw para que no rompa la inicialización del servidor si falla
+    return { msg: "La migración falló", detalle: error.message };
+  }
+};
+
+// Ejecutar migración con un pequeño delay para asegurarse de que Sequelize haya sincronizado las tablas
+setTimeout(() => {
+  exports.migrarSubdependenciasExistentes().catch(err => console.error(err));
+}, 3000);
+
+
+/**
  * Registrar o actualizar biometría
  */
 exports.registrarBiometria = async (data, clientIp) => {
@@ -35,9 +86,14 @@ exports.registrarBiometria = async (data, clientIp) => {
     rol,
     id_categoria,
     id_dependencia,
-    id_subdependencia,
+    subdependencias_ids = [],
     huellas,
   } = data;
+
+  // Validar que se asigne al menos una subdependencia
+  if (!subdependencias_ids || subdependencias_ids.length === 0) {
+    throw new Error("Se requiere al menos una subdependencia asignada.");
+  }
 
   return await executeTransaction(clientIp, async (t) => {
     let registro;
@@ -68,7 +124,6 @@ exports.registrarBiometria = async (data, clientIp) => {
         rol,
         id_categoria,
         id_dependencia,
-        id_subdependencia,
         fecha_modificacion: new Date(),
       };
 
@@ -86,6 +141,9 @@ exports.registrarBiometria = async (data, clientIp) => {
       }
 
       await registro.update(updateData, { transaction: t });
+
+      // Sincronizar subdependencias (reemplaza completamente el set anterior)
+      await registro.setSubdependencias(subdependencias_ids, { transaction: t });
     } else {
       // CASO 2: CREACIÓN (Nuevo Registro)
 
@@ -119,11 +177,13 @@ exports.registrarBiometria = async (data, clientIp) => {
           rol,
           id_categoria,
           id_dependencia,
-          id_subdependencia,
           template: biometricData,
         },
         { transaction: t },
       );
+
+      // Asignar subdependencias al nuevo registro
+      await registro.setSubdependencias(subdependencias_ids, { transaction: t });
     }
 
     return {
@@ -179,6 +239,14 @@ exports.verificarIdentidad = async (cedula, muestraActual) => {
 
   const registro = await Biometria.findOne({
     where: { cedula, estado: "ACTIVO" },
+    include: [
+      {
+        model: Subdependencia,
+        as: "Subdependencias",
+        attributes: ["id_subdependencia", "nombre"],
+        through: { attributes: [] }, // No incluir columnas de la tabla pivot
+      },
+    ],
   });
 
   if (!registro) {
@@ -268,7 +336,12 @@ exports.obtenerRegistros = async (query, user) => {
         as: "Dependencia",
         attributes: ["nombre_dependencia"],
       },
-      { model: Subdependencia, as: "Subdependencia", attributes: ["nombre"] },
+      {
+        model: Subdependencia,
+        as: "Subdependencias",
+        attributes: ["id_subdependencia", "nombre"],
+        through: { attributes: [] },
+      },
     ],
   });
 };

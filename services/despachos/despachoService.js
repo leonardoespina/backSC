@@ -89,6 +89,7 @@ exports.validarFirma = async (cedula, huella, id_solicitud, validar_pertenencia 
   }
 
   // Usamos el servicio de biometría existente
+  // verificarIdentidad ahora retorna persona con Subdependencias[]
   const matchResult = await biometriaService.verificarIdentidad(cedula, huella);
 
   if (!matchResult.match) {
@@ -120,9 +121,14 @@ exports.validarFirma = async (cedula, huella, id_solicitud, validar_pertenencia 
         "El receptor no pertenece a la dependencia de la solicitud.",
       );
     }
-    if (registro.id_subdependencia !== solicitud.id_subdependencia) {
+
+    // Validar subdependencia contra el array M:N
+    const subdependenciasIds = (registro.Subdependencias || []).map(
+      (s) => s.id_subdependencia
+    );
+    if (!subdependenciasIds.includes(solicitud.id_subdependencia)) {
       throw new Error(
-        "El receptor no pertenece a la subdependencia de la solicitud.",
+        "El receptor no está autorizado para la subdependencia de esta solicitud.",
       );
     }
   }
@@ -210,6 +216,16 @@ exports.imprimirTicket = async (data, user, clientIp) => {
     ) {
       throw new Error(
         "El receptor no tiene rol de Retiro (Solicitante) autorizado.",
+      );
+    }
+
+    // Validar que el receptor esté autorizado para la subdependencia de esta solicitud (M:N)
+    const receptorSubIds = (matchReceptor.persona.Subdependencias || []).map(
+      (s) => s.id_subdependencia
+    );
+    if (!receptorSubIds.includes(solicitud.id_subdependencia)) {
+      throw new Error(
+        "El receptor no está autorizado para la subdependencia de esta solicitud.",
       );
     }
 

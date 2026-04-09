@@ -11,5 +11,6 @@ router.post("/comparar", biometriaController.compararHuellas);
 router.post("/verificar", biometriaController.verificarIdentidad);
 router.get("/", biometriaController.obtenerRegistros);
 router.delete("/:id", biometriaController.eliminarRegistro);
+router.post("/migrar", biometriaController.migrarSubdependencias);
 
 module.exports = router;
