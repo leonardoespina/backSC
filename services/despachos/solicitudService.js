@@ -82,6 +82,7 @@ exports.createSolicitud = async (data, user, clientIp) => {
               ESTADOS_SOLICITUD.IMPRESA,
             ],
           },
+          tipo_suministro: { [Op.ne]: TIPOS_SUMINISTRO.BIDON },
         },
         transaction: t,
       });
