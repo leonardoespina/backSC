@@ -111,7 +111,7 @@ exports.listarMediciones = async (query) => {
 
   const searchableFields = ["observaciones"];
 
-  return await paginate(MedicionTanque, query, {
+  const pagedResult = await paginate(MedicionTanque, query, {
     where,
     searchableFields,
     include: [
@@ -134,6 +134,34 @@ exports.listarMediciones = async (query) => {
       ["hora_medicion", "DESC"],
     ],
   });
+
+  // Injectar can_revert
+  if (pagedResult && pagedResult.data && pagedResult.data.length > 0) {
+    const idsTanques = [...new Set(pagedResult.data.map(m => m.id_tanque))];
+    const tanksLastMovement = {};
+    
+    // Obtener el último movimiento para cada tanque involucrado en la página
+    for (const id_tanque of idsTanques) {
+      const lastMov = await MovimientoInventario.findOne({
+        where: { id_tanque },
+        order: [["id_movimiento", "DESC"]],
+        attributes: ["id_referencia", "tabla_referencia"]
+      });
+      tanksLastMovement[id_tanque] = lastMov;
+    }
+
+    // Inyectar bandera
+    pagedResult.data = pagedResult.data.map(medicion => {
+      const item = medicion.toJSON ? medicion.toJSON() : medicion;
+      // Una medición se puede revertir si este es el ÚLTIMO movimiento de SU tanque
+      const isLast = tanksLastMovement[item.id_tanque] &&
+                     tanksLastMovement[item.id_tanque].tabla_referencia === "mediciones_tanque" &&
+                     tanksLastMovement[item.id_tanque].id_referencia === item.id_medicion;
+      return { ...item, can_revert: !!isLast };
+    });
+  }
+
+  return pagedResult;
 };
 
 /**

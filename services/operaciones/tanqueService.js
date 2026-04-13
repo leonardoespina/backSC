@@ -316,3 +316,51 @@ exports.obtenerListaTanques = async (query) => {
     order: [["nombre", "ASC"]],
   });
 };
+
+/**
+ * Alternar uso de tanque (activo_para_despacho)
+ */
+exports.toggleUsoTanque = async (id, clientIp) => {
+  return await executeTransaction(clientIp, async (t) => {
+    const tanque = await Tanque.findByPk(id, { transaction: t });
+    if (!tanque) {
+      const error = new Error("Tanque no encontrado");
+      error.status = 404;
+      throw error;
+    }
+
+    const nuevoEstado = !tanque.activo_para_despacho;
+
+    // Regla de Negocio: Solo un tanque activo para despacho
+    // Si se está activando (true), apagar cualquier otro tanque del mismo tipo de combustible en el llenadero
+    if (nuevoEstado === true) {
+      const tanqueActivoPrevio = await Tanque.findOne({
+        where: {
+          id_llenadero: tanque.id_llenadero,
+          id_tipo_combustible: tanque.id_tipo_combustible,
+          activo_para_despacho: true,
+          id_tanque: { [Op.ne]: id } // Excluir el tanque actual
+        },
+        transaction: t
+      });
+
+      if (tanqueActivoPrevio) {
+        await tanqueActivoPrevio.update({ activo_para_despacho: false }, { transaction: t });
+      }
+    }
+
+    // Actualizar registro
+    await tanque.update({ activo_para_despacho: nuevoEstado }, { transaction: t });
+
+    // Devolver objeto completo para el emit
+    const tanqueCompleto = await Tanque.findByPk(id, {
+      include: [
+        { model: Llenadero, as: "Llenadero", attributes: ["nombre_llenadero"] },
+        { model: TipoCombustible, as: "TipoCombustible", attributes: ["nombre"] },
+      ],
+      transaction: t,
+    });
+
+    return tanqueCompleto;
+  });
+};

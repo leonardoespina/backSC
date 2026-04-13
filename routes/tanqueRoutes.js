@@ -78,4 +78,11 @@ router.delete(
   tanqueController.eliminarTanque,
 );
 
+// PATCH /api/tanques/:id/uso - Cambiar tanque en uso (Solo Roles Autorizados)
+router.patch(
+  "/:id/uso",
+  [authorizePermission(PERMISSIONS.TOGGLE_TANQUE_USO), validarCampos],
+  tanqueController.toggleUsoTanque,
+);
+
 module.exports = router;

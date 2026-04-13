@@ -320,7 +320,7 @@ exports.listarCierres = async (query) => {
         where.fecha_lote = { [Op.between]: [fecha_inicio, fecha_fin] };
     }
 
-    return await paginate(CierreTurno, query, {
+    const pagedResult = await paginate(CierreTurno, query, {
         where,
         searchableFields: ["observaciones"],
         include: [
@@ -339,6 +339,28 @@ exports.listarCierres = async (query) => {
             ["hora_inicio_lote", "DESC"],
         ],
     });
+
+    if (pagedResult && pagedResult.data && pagedResult.data.length > 0) {
+        const idsLlenaderos = [...new Set(pagedResult.data.map(c => c.id_llenadero))];
+        const ultimosCierres = {};
+
+        for (const idLoc of idsLlenaderos) {
+            const u = await CierreTurno.findOne({
+                where: { id_llenadero: idLoc, estado: "CERRADO" },
+                order: [["id_cierre", "DESC"]],
+                attributes: ["id_cierre"]
+            });
+            ultimosCierres[idLoc] = u ? u.id_cierre : null;
+        }
+
+        pagedResult.data = pagedResult.data.map(cierre => {
+            const item = cierre.toJSON ? cierre.toJSON() : cierre;
+            const isLast = ultimosCierres[item.id_llenadero] === item.id_cierre;
+            return { ...item, can_revert: !!isLast };
+        });
+    }
+
+    return pagedResult;
 };
 
 

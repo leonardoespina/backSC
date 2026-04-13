@@ -136,7 +136,7 @@ exports.listarTransferencias = async (query) => {
 
   const searchableFields = ["observacion"];
 
-  return await paginate(TransferenciaInterna, query, {
+  const pagedResult = await paginate(TransferenciaInterna, query, {
     where,
     searchableFields,
     include: [
@@ -172,6 +172,47 @@ exports.listarTransferencias = async (query) => {
     ],
     order: [["fecha_transferencia", "DESC"]],
   });
+
+  // Injectar can_revert
+  if (pagedResult && pagedResult.data && pagedResult.data.length > 0) {
+    const idsTanquesSet = new Set();
+    pagedResult.data.forEach(t => {
+      if (t.id_tanque_origen) idsTanquesSet.add(t.id_tanque_origen);
+      if (t.id_tanque_destino) idsTanquesSet.add(t.id_tanque_destino);
+    });
+
+    const tanksLastMovement = {};
+    for (const id_tanque of idsTanquesSet) {
+      const lastMov = await MovimientoInventario.findOne({
+        where: { id_tanque },
+        order: [["id_movimiento", "DESC"]],
+        attributes: ["id_referencia", "tabla_referencia"]
+      });
+      tanksLastMovement[id_tanque] = lastMov;
+    }
+
+    pagedResult.data = pagedResult.data.map(transferencia => {
+      const item = transferencia.toJSON ? transferencia.toJSON() : transferencia;
+      
+      const lastMovOrigen = tanksLastMovement[item.id_tanque_origen];
+      const lastMovDestino = tanksLastMovement[item.id_tanque_destino];
+
+      const isLastOrigen = lastMovOrigen && 
+                           lastMovOrigen.tabla_referencia === "transferencias_internas" && 
+                           lastMovOrigen.id_referencia === item.id_transferencia;
+                           
+      const isLastDestino = lastMovDestino && 
+                            lastMovDestino.tabla_referencia === "transferencias_internas" && 
+                            lastMovDestino.id_referencia === item.id_transferencia;
+
+      // Debe ser el último movimiento en AMBOS tanques
+      const isLast = isLastOrigen && isLastDestino;
+
+      return { ...item, can_revert: !!isLast };
+    });
+  }
+
+  return pagedResult;
 };
 
 /**

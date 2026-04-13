@@ -98,3 +98,24 @@ exports.obtenerListaTanques = async (req, res) => {
     res.status(500).json({ msg: "Error al obtener lista de tanques" });
   }
 };
+
+// --- ALTERNAR USO ---
+exports.toggleUsoTanque = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const tanque = await tanqueService.toggleUsoTanque(id, req.ip);
+
+    if (req.io) req.io.emit("tanque:actualizado", tanque);
+
+    res.json({ msg: "Estado de uso del tanque alterado correctamente", tanque });
+  } catch (error) {
+    console.error("Error al alternar uso del tanque:", error);
+    if (error.status === 404 || error.status === 400) {
+      return res.status(error.status).json({ msg: error.message });
+    }
+    if (!res.headersSent) {
+      res.status(500).json({ msg: "Error al modificar el estado de uso del tanque" });
+    }
+  }
+};
