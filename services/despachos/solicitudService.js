@@ -71,7 +71,7 @@ exports.createSolicitud = async (data, user, clientIp) => {
     }
 
     // Validar Bloqueo de Placa (RF-05) — Solo aplica a solicitudes REGULAR
-    if (!esBidon) {
+    if (tipo_suministro !== TIPOS_SUMINISTRO.BIDON) {
       const solicitudActiva = await Solicitud.findOne({
         where: {
           placa: placaFinal,

@@ -17,7 +17,7 @@ const { Op } = require("sequelize");
 /**
  * Consultar datos de un Ticket para validación
  */
-exports.consultarTicket = async (codigo) => {
+exports.consultarTicket = async (codigo, clientIp) => {
   const solicitud = await Solicitud.findOne({
     where: { codigo_ticket: codigo },
     include: [
@@ -28,7 +28,7 @@ exports.consultarTicket = async (codigo) => {
       },
       { model: Subdependencia, as: "Subdependencia", attributes: ["nombre"] },
       { model: TipoCombustible, attributes: ["nombre"], where: { activo: true }, required: false },
-      { model: Llenadero, attributes: ["nombre_llenadero"] },
+      { model: Llenadero, attributes: ["nombre_llenadero", "direccion_ip"], required: false },
       {
         model: Usuario,
         as: "Solicitante",
@@ -42,6 +42,28 @@ exports.consultarTicket = async (codigo) => {
     const error = new Error("Ticket no encontrado");
     error.status = 404;
     throw error;
+  }
+
+  // =========================================================
+  // VALIDACIÓN DE RED: Verificar que la terminal que escanea
+  // pertenece al segmento de red del llenadero del ticket.
+  // =========================================================
+  if (solicitud.Llenadero && solicitud.Llenadero.direccion_ip) {
+    const ipsValidas = solicitud.Llenadero.direccion_ip
+      .split(',')
+      .map(ip => ip.trim())
+      .filter(ip => ip);
+
+    if (ipsValidas.length > 0) {
+      const ipValida = ipsValidas.some(ip => clientIp && clientIp.includes(ip));
+      if (!ipValida) {
+        const error = new Error(
+          `Este ticket pertenece al Llenadero '${solicitud.Llenadero.nombre_llenadero}' y no puede ser procesado desde esta terminal (Red: ${clientIp || 'Desconocida'}).`
+        );
+        error.status = 403;
+        throw error;
+      }
+    }
   }
 
   // Validar estado
@@ -81,11 +103,12 @@ exports.finalizarTicket = async (data, user, clientIp) => {
   return await executeTransaction(clientIp, async (t) => {
     const solicitud = await Solicitud.findOne({
       where: { codigo_ticket },
+      include: [{ model: Llenadero }],
       transaction: t,
     });
 
     if (!solicitud) {
-      throw new Error("Ticket no encontrado");
+      throw new Error(`Ticket no encontrado para finalizar el despacho (Código: ${codigo_ticket})`);
     }
 
     if (!["DESPACHADA", "IMPRESA"].includes(solicitud.estado)) {
@@ -93,6 +116,29 @@ exports.finalizarTicket = async (data, user, clientIp) => {
         `El ticket debe estar IMPRESA o DESPACHADA para finalizar (Estado: ${solicitud.estado})`,
       );
     }
+
+    // Validar configuración de red (IP) del Llenadero A/B
+    console.log("=== DEBUG IP LLENADERO FINALIZACION ===");
+    console.log("Ticket del Llenadero:", solicitud.Llenadero?.nombre_llenadero);
+    console.log("IP configurada en BD para este Llenadero:", solicitud.Llenadero?.direccion_ip);
+    console.log("IP detectada de la terminal (clientIp):", clientIp);
+
+    if (solicitud.Llenadero && solicitud.Llenadero.direccion_ip) {
+       const ipsValidas = solicitud.Llenadero.direccion_ip.split(',').map(ip => ip.trim()).filter(ip => ip);
+       console.log("IPs Segmentos válidos procesados:", ipsValidas);
+
+       if (ipsValidas.length > 0) {
+          const ipValida = ipsValidas.some(ip => clientIp && clientIp.includes(ip));
+          console.log("¿Es válida la IP actual?:", ipValida);
+
+          if (!ipValida) {
+             throw new Error(`Seguridad Llenadero: El ticket pertenece a '${solicitud.Llenadero.nombre_llenadero}' y no puede ser finalizado desde una terminal no autorizada (IP: ${clientIp || 'Desconocida'}).`);
+          }
+       }
+    } else {
+       console.log("No hay Llenadero asociado o no tiene IP configurada. Bypass de seguridad.");
+    }
+    console.log("==========================");
 
     const cantidadAprobada = parseFloat(solicitud.cantidad_litros);
     const cantidadReal = parseFloat(cantidad_real_cargada);
@@ -117,6 +163,12 @@ exports.finalizarTicket = async (data, user, clientIp) => {
 
     if (tanqueActivo) {
       if (solicitud.estado === "IMPRESA") {
+        if (parseFloat(tanqueActivo.nivel_actual) < cantidadReal) {
+          throw new Error(
+            `Stock insuficiente en el tanque activo del Llenadero. Nivel actual: ${tanqueActivo.nivel_actual} L, requerido: ${cantidadReal} L.`
+          );
+        }
+
         await tanqueActivo.decrement("nivel_actual", {
           by: cantidadReal,
           transaction: t,

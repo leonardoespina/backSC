@@ -118,12 +118,12 @@ exports.validarFirma = async (cedula, huella, id_solicitud, validar_pertenencia 
   // Nota: Se elimina la validación de id_dependencia para permitir que una
   // persona de PCP pueda despachar por otra dependencia si tiene asignada su subdependencia.
   if (validar_pertenencia && (registro.rol === "RETIRO" || registro.rol === "AMBOS")) {
-    
+
     // Validar subdependencia contra el array M:N
     const subdependenciasIds = (registro.Subdependencias || []).map(
       (s) => String(s.id_subdependencia)
     );
-    
+
     if (!subdependenciasIds.includes(String(solicitud.id_subdependencia))) {
       throw new Error(
         "El receptor no está autorizado para la subdependencia de esta solicitud.",
@@ -287,7 +287,7 @@ exports.imprimirTicket = async (data, user, clientIp) => {
       precio: hasPrice ? parseFloat(s.PrecioCombustible.precio || 0) : 0,
       moneda: hasPrice ? (s.PrecioCombustible.Moneda?.nombre || "USD") : "USD",
       llenadero: s.Llenadero?.nombre_llenadero || "S/L",
-      flota: s.flota || "NO APLICA",
+      flota: [s.marca, s.modelo].filter(Boolean).join("-") || s.flota || "NO APLICA",
       placa: s.placa || "NO APLICA",
       suministro: s.tipo_suministro === "BIDON" ? "Bidon" : "Regular",
       autorizacion: s.Aprobador ? `${s.Aprobador.nombre} ${s.Aprobador.apellido}` : "S/A",
@@ -399,6 +399,32 @@ exports.despacharSolicitud = async (data, clientIp) => {
         `El ticket está en estado ${solicitud.estado} y no puede ser despachado.`,
       );
     }
+
+    // Validar configuración de red (IP) del Llenadero A/B
+    console.log("=== DEBUG IP LLENADERO ===");
+    console.log("Ticket del Llenadero:", solicitud.Llenadero?.nombre_llenadero);
+    console.log("IP configurada en BD para este Llenadero:", solicitud.Llenadero?.direccion_ip);
+    console.log("IP detectada de la terminal (clientIp):", clientIp);
+
+    if (solicitud.Llenadero && solicitud.Llenadero.direccion_ip) {
+      const ipsValidas = solicitud.Llenadero.direccion_ip.split(',').map(ip => ip.trim()).filter(ip => ip);
+      console.log("IPs Segmentos válidos procesados:", ipsValidas);
+
+      if (ipsValidas.length > 0) {
+        // Extraemos usando includes para ignorar variaciones de loopback o ipv6 (e.g. ::ffff:)
+        const ipValida = ipsValidas.some(ip => clientIp && clientIp.includes(ip));
+        console.log("¿Es válida la IP actual?:", ipValida);
+
+        if (!ipValida) {
+          throw new Error(`Seguridad Llenadero: El ticket pertenece a '${solicitud.Llenadero.nombre_llenadero}' y no puede ser finalizado desde una terminal no autorizada (IP: ${clientIp || 'Desconocida'}).`);
+        }
+      } else {
+        console.log("El Llenadero tiene el campo direccion_ip vacío o con formato inválido.");
+      }
+    } else {
+      console.log("No hay Llenadero asociado o no tiene IP configurada. Bypass de seguridad.");
+    }
+    console.log("==========================");
 
     const tanqueActivo = await Tanque.findOne({
       where: {

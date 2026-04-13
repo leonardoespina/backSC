@@ -7,15 +7,18 @@ exports.consultarTicket = async (req, res) => {
   const { codigo } = req.params;
 
   try {
-    const result = await validacionService.consultarTicket(codigo);
+    const rawIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip;
+    const clientIp = typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : rawIp;
+
+    const result = await validacionService.consultarTicket(codigo, clientIp);
     res.json(result);
   } catch (error) {
     console.error("Error consultando ticket:", error);
     if (error.status === 404) {
       return res.status(404).json({ msg: error.message });
     }
-    if (error.status === 400) {
-      return res.status(400).json({
+    if (error.status === 400 || error.status === 403) {
+      return res.status(error.status).json({
         msg: error.message,
         status: error.statusCode,
       });
@@ -32,10 +35,13 @@ exports.consultarTicket = async (req, res) => {
  */
 exports.finalizarTicket = async (req, res) => {
   try {
+    const rawIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip;
+    const clientIp = typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : rawIp;
+
     const result = await validacionService.finalizarTicket(
       req.body,
       req.usuario,
-      req.ip,
+      clientIp,
     );
 
     // Notificar
@@ -65,6 +71,7 @@ exports.finalizarTicket = async (req, res) => {
     ) {
       return res.status(400).json({ msg: error.message });
     }
-    res.status(500).json({ msg: "Error al finalizar ticket" });
+    // Retornamos el error exacto temporalmente para ver si es la validación IP o SQL
+    res.status(500).json({ msg: "Error al finalizar ticket: " + error.message });
   }
 };

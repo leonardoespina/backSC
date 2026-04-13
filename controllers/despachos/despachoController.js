@@ -133,7 +133,11 @@ exports.reimprimirTicket = async (req, res) => {
  */
 exports.despacharSolicitud = async (req, res) => {
   try {
-    const result = await despachoService.despacharSolicitud(req.body, req.ip);
+    const rawIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip;
+    // x-forwarded-for can be a comma-separated list of IPs, we take the first one
+    const clientIp = typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : rawIp;
+    
+    const result = await despachoService.despacharSolicitud(req.body, clientIp);
 
     if (req.io && result && result.solicitud) {
       req.io.emit("solicitud:despachada", result.solicitud);

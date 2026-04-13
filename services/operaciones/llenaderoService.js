@@ -8,7 +8,7 @@ const { Op } = require("sequelize");
  * Crear Llenadero
  */
 exports.crearLlenadero = async (data, clientIp) => {
-  const { nombre_llenadero } = data;
+  const { nombre_llenadero, direccion_ip } = data;
 
   return await executeTransaction(clientIp, async (t) => {
     // 1. Validar duplicados
@@ -26,6 +26,7 @@ exports.crearLlenadero = async (data, clientIp) => {
     const nuevoLlenadero = await Llenadero.create(
       {
         nombre_llenadero,
+        direccion_ip,
         estado: "ACTIVO",
       },
       { transaction: t },
@@ -115,6 +116,7 @@ exports.actualizarLlenadero = async (id, data, clientIp) => {
   const {
     nombre_llenadero,
     estado,
+    direccion_ip,
   } = data;
 
   return await executeTransaction(clientIp, async (t) => {
@@ -146,6 +148,7 @@ exports.actualizarLlenadero = async (id, data, clientIp) => {
     }
 
     if (estado) llenadero.estado = estado;
+    if (direccion_ip !== undefined) llenadero.direccion_ip = direccion_ip;
 
     llenadero.fecha_modificacion = new Date();
     await llenadero.save({ transaction: t });

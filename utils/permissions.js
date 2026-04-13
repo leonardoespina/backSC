@@ -22,6 +22,7 @@ const PERMISSIONS = {
     MANAGE_SYSTEM: "manage_system",
     REJECT_SOLICITUD: "reject_solicitud",
     REVERTIR_OPERACION: "revertir_operacion",
+    TOGGLE_TANQUE_USO: "toggle_tanque_uso",
 };
 
 const ROLE_PERMISSIONS = {
@@ -121,6 +122,12 @@ function hasPermission(user, permission) {
     if (permission === PERMISSIONS.CREATE_SOLICITUD) {
         // Solo SOLICITANTE y AMBOS pueden crear
         return ["SOLICITANTE", "AMBOS"].includes(user.capacidad_solicitudes);
+    }
+
+    if (permission === PERMISSIONS.TOGGLE_TANQUE_USO) {
+        if (user.rol_sistema === "ADMIN" || user.tipo_usuario === "ADMIN") return true;
+        if (user.rol_sistema === "ALMACEN" && user.capacidad_solicitudes === "AMBOS") return true;
+        return false;
     }
 
     return false;

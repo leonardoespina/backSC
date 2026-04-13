@@ -20,7 +20,11 @@ const Llenadero = sequelize.define(
       type: DataTypes.STRING(20),
       defaultValue: "ACTIVO",
     },
-
+    direccion_ip: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      comment: 'Dirección IP estática del llenadero, pueden ser varias separadas por coma.',
+    },
   },
   {
     tableName: "llenaderos",
