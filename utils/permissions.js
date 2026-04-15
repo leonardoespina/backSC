@@ -106,8 +106,8 @@ function hasPermission(user, permission) {
     }
 
     if (permission === PERMISSIONS.REJECT_SOLICITUD) {
-        // Solo AMBOS puede rechazar (según nueva regla de negocio)
-        return user.capacidad_solicitudes === "AMBOS";
+        // APROBADOR y AMBOS pueden rechazar (aprobar/rechazar son dos caras de la misma decisión)
+        return ["APROBADOR", "AMBOS"].includes(user.capacidad_solicitudes);
     }
 
     if (permission === PERMISSIONS.REVERTIR_OPERACION) {
