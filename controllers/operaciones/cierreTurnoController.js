@@ -1,4 +1,5 @@
 const svc = require("../../services/operaciones/cierreTurnoService");
+const reporteSvc = require("../../services/operaciones/cierreTurnoReportesService");
 const { CierreTurno } = require("../../models");
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -120,7 +121,7 @@ exports.obtenerCierre = async (req, res) => {
  */
 exports.generarReporte = async (req, res) => {
     try {
-        const reporte = await svc.generarReporteTurno(req.params.id);
+        const reporte = await reporteSvc.generarReporteTurno(req.params.id);
         res.json(reporte);
     } catch (error) {
         res.status(500).json({ msg: error.message });
@@ -132,7 +133,7 @@ exports.generarReporte = async (req, res) => {
  */
 exports.generarActaTurno = async (req, res) => {
     try {
-        const acta = await svc.generarActaTurno(req.params.id);
+        const acta = await reporteSvc.generarActaTurno(req.params.id);
         res.json(acta);
     } catch (error) {
         res.status(500).json({ msg: error.message });
