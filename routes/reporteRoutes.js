@@ -44,4 +44,12 @@ router.get(
   reporteController.obtenerReporteCuposUsuario,
 );
 
+// Ruta para el reporte de situación de combustible (stock + consumo por llenadero y tipo)
+router.get(
+  "/situacion-combustible",
+  autenticarUsuario,
+  authorizePermission(PERMISSIONS.VIEW_REPORTES_GLOB),
+  reporteController.obtenerSituacionCombustible,
+);
+
 module.exports = router;

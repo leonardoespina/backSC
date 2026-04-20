@@ -7,6 +7,7 @@ const {
   getConsumoPorDependencia,
   getCuposUsuario,
 } = require("../../services/administracion/reporteService");
+const { getSituacionCombustible } = require("../../services/administracion/reporteSituacionService");
 const { Usuario } = require("../../models");
 
 // ─────────────────────────────────────────────
@@ -143,5 +144,19 @@ exports.obtenerReporteCuposUsuario = async (req, res) => {
   } catch (error) {
     console.error("Error al obtener reporte de cupos de usuario:", error);
     res.status(500).json({ msg: "Error al consultar sus cupos.", error: error.message });
+  }
+};
+
+// ─────────────────────────────────────────────
+// GET /api/reportes/situacion-combustible
+// ─────────────────────────────────────────────
+exports.obtenerSituacionCombustible = async (req, res) => {
+  try {
+    const { fecha_desde, fecha_hasta } = req.query;
+    const data = await getSituacionCombustible({ fecha_desde, fecha_hasta });
+    res.json(data);
+  } catch (error) {
+    console.error("Error en situación de combustible:", error);
+    res.status(500).json({ msg: "Error al generar el reporte de situación.", error: error.message });
   }
 };
