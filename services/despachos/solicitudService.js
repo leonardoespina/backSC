@@ -10,6 +10,8 @@ const {
   Categoria,
   CupoBase,
   PrecioCombustible,
+  Tanque,
+  MovimientoInventario,
 } = require("../../models");
 const { paginate } = require("../../helpers/paginationHelper");
 const { executeTransaction } = require("../../helpers/transactionHelper");
@@ -93,6 +95,25 @@ exports.createSolicitud = async (data, user, clientIp) => {
           }).`,
         );
       }
+    }
+
+    // Validar Físico Inicial (Tanque Activo del Llenadero)
+    const tanqueActivo = await Tanque.findOne({
+      where: {
+        id_llenadero,
+        id_tipo_combustible,
+        estado: 'ACTIVO',
+        activo_para_despacho: true
+      },
+      transaction: t,
+    });
+
+    if (!tanqueActivo) {
+      throw new Error("No hay tanque activo disponible para despachar este combustible en el llenadero.");
+    }
+
+    if (parseFloat(tanqueActivo.nivel_actual) < parseFloat(cantidad_litros)) {
+      throw new Error(`Inventario Físico Insuficiente. Nivel actual del tanque: ${tanqueActivo.nivel_actual} Lts. Solicitado: ${cantidad_litros} Lts.`);
     }
 
     // Validar Cupo y Reservar (RF-04, RF-06)
@@ -486,5 +507,128 @@ exports.obtenerLlenaderosPorCombustible = async (id_tipo_combustible) => {
       }
     ],
     order: [["nombre_llenadero", "ASC"]],
+  });
+};
+/**
+ * Anular una solicitud FINALIZADA (Solo ADMIN)
+ * Reintegrar inventario y cupo, generando movimiento de ANULACION.
+ */
+exports.anularSolicitudFinalizada = async (id, user, clientIp) => {
+  // Validar rol de Administrador
+  if (user.tipo_usuario !== 'ADMIN' && user.rol_sistema !== 'ADMIN') {
+    throw new Error("Solo el administrador puede realizar esta operación de anulación.");
+  }
+
+  return await executeTransaction(clientIp, async (t) => {
+    // 1. Cargar solicitud con bloqueo
+    const solicitud = await Solicitud.findByPk(id, {
+      transaction: t,
+      lock: true
+    });
+
+    if (!solicitud) throw new Error("Solicitud no encontrada.");
+
+    // 2. Validaciones de estado
+    if (solicitud.estado !== ESTADOS_SOLICITUD.FINALIZADA) {
+      throw new Error(`Solo se pueden anular solicitudes en estado FINALIZADA. (Estado actual: ${solicitud.estado})`);
+    }
+
+    // Nota: Se permite anular incluso si tiene id_cierre_turno (Casos Extremos de Administración)
+    const esRectificacion = !!solicitud.id_cierre_turno;
+
+    // 3. Obtener el movimiento de despacho original para saber qué tanque se usó
+    const movimientoDespacho = await MovimientoInventario.findOne({
+      where: {
+        id_referencia: solicitud.id_solicitud,
+        tabla_referencia: 'solicitudes',
+        tipo_movimiento: 'DESPACHO'
+      },
+      transaction: t,
+      lock: true
+    });
+
+    if (!movimientoDespacho) {
+      throw new Error("No se encontró el movimiento de inventario original para revertir.");
+    }
+
+    const tanque = await Tanque.findByPk(movimientoDespacho.id_tanque, {
+      transaction: t,
+      lock: true
+    });
+
+    if (!tanque) throw new Error("Tanque asociado al despacho no encontrado.");
+
+    const cantidadARevertir = parseFloat(solicitud.cantidad_despachada || 0);
+
+    // 4. REVERTIR INVENTARIO (TANQUE)
+    const volumen_antes = parseFloat(tanque.nivel_actual);
+    const volumen_despues = volumen_antes + cantidadARevertir;
+
+    await tanque.update({
+      nivel_actual: volumen_despues
+    }, { transaction: t });
+
+    // 5. REGISTRAR MOVIMIENTO DE ANULACION
+    // Siempre id_cierre_turno: null en la anulación para que entre en el próximo lote activo
+    await MovimientoInventario.create({
+      id_tanque: tanque.id_tanque,
+      id_cierre_turno: null, 
+      tipo_movimiento: 'ANULACION',
+      id_referencia: solicitud.id_solicitud,
+      tabla_referencia: 'solicitudes',
+      volumen_antes: volumen_antes,
+      volumen_despues: volumen_despues,
+      variacion: cantidadARevertir,
+      fecha_movimiento: new Date(),
+      id_usuario: user.id_usuario,
+      observaciones: esRectificacion 
+        ? `RECTIFICACIÓN ADMINISTRATIVA de ticket cerrado #${solicitud.id_cierre_turno}. Solicitud ${solicitud.codigo_ticket}`
+        : `Anulación administrativa de solicitud ${solicitud.codigo_ticket}`
+    }, { transaction: t });
+
+    // 6. REVERTIR CUPO (Reintegrar consumo)
+    const periodoOriginal = moment(solicitud.fecha_solicitud).format("YYYY-MM");
+    const cupo = await CupoActual.findOne({
+      where: {
+        periodo: periodoOriginal,
+        estado: { [Op.ne]: "CERRADO" }
+      },
+      include: [{
+        model: CupoBase,
+        as: "CupoBase",
+        where: {
+          id_subdependencia: solicitud.id_subdependencia,
+          id_tipo_combustible: solicitud.id_tipo_combustible
+        }
+      }],
+      transaction: t,
+      lock: true
+    });
+
+    if (cupo) {
+      await cupo.increment("cantidad_disponible", {
+        by: cantidadARevertir,
+        transaction: t
+      });
+      await cupo.decrement("cantidad_consumida", {
+        by: cantidadARevertir,
+        transaction: t
+      });
+      
+      if (cupo.estado === "AGOTADO") {
+        await cupo.update({ estado: "ACTIVO" }, { transaction: t });
+      }
+    }
+
+    // 7. ACTUALIZAR ESTADO DE SOLICITUD
+    await solicitud.update({
+      estado: ESTADOS_SOLICITUD.ANULADA,
+      observaciones: (solicitud.observaciones || '') + ` | ANULACION FINALIZADA por ${user.nombre}`
+    }, { transaction: t });
+
+    return {
+      msg: "Solicitud finalizada anulada correctamente. Inventario y cupo reintegrados.",
+      solicitud
+    };
   });
 };

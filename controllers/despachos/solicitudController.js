@@ -141,3 +141,30 @@ exports.obtenerLlenaderosPorCombustible = async (req, res) => {
     res.status(500).json({ msg: "Error al obtener llenaderos" });
   }
 };
+exports.anularSolicitudFinalizada = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await solicitudService.anularSolicitudFinalizada(
+      id,
+      req.usuario,
+      req.ip
+    );
+
+    if (req.io) req.io.emit("solicitud:actualizada", result.solicitud);
+
+    res.json(result);
+  } catch (error) {
+    console.error("Error en anularSolicitudFinalizada:", error);
+    if (error.message === "Solicitud no encontrada.") {
+      return res.status(404).json({ msg: error.message });
+    }
+    if (error.message.includes("Solo el administrador") || error.message.includes("asociada a un cierre")) {
+      return res.status(403).json({ msg: error.message });
+    }
+    if (error.message.includes("Solo se pueden anular")) {
+      return res.status(400).json({ msg: error.message });
+    }
+    res.status(500).json({ msg: "Error al procesar la anulación de la solicitud finalizada" });
+  }
+};

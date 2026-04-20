@@ -56,4 +56,12 @@ router.put(
   solicitudController.rechazarSolicitud,
 );
 
+// Anular Solicitud FINALIZADA (Solo ADMIN) - OPERACIÓN CRÍTICA
+router.post(
+  "/:id/anular-finalizada",
+  criticalLimiter,
+  authorizePermission(PERMISSIONS.REVERTIR_OPERACION),
+  solicitudController.anularSolicitudFinalizada
+);
+
 module.exports = router;

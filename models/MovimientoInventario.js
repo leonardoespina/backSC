@@ -40,6 +40,7 @@ const MovimientoInventario = sequelize.define(
                     "TRANSFERENCIA_ENTRADA",
                     "RECEPCION_CISTERNA",
                     "AJUSTE_MEDICION",
+                    "ANULACION",
                 ]],
             },
         },
