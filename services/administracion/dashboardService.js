@@ -14,8 +14,10 @@ exports.getStats = async () => {
 
   // Formatear para que el componente lo reciba como 'tank' (para reusar lógica)
   const llenaderosFormatted = tanques.map((t) => ({
-    id_llenadero: t.id_tanque, // Se usa el ID del tanque para el key en v-for
-    nombre: `${t.Llenadero?.nombre_llenadero || 'S/N'} - ${t.nombre}`,
+    id_tanque: t.id_tanque,
+    id_llenadero: t.id_llenadero,
+    nombre_llenadero: t.Llenadero?.nombre_llenadero || 'S/N',
+    nombre: t.nombre,
     capacidad_maxima: parseFloat(t.capacidad_maxima) || 0,
     nivel_actual: parseFloat(t.nivel_actual) || 0,
     tipo_tanque: t.tipo_tanque || "CILINDRICO",

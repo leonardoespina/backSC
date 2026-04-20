@@ -14,6 +14,7 @@ const {
     CupoActual,
     CupoBase,
     Categoria,
+    Biometria,
 } = require("../../models");
 const { Op } = require("sequelize");
 const sequelize = require("sequelize");
@@ -119,6 +120,8 @@ async function getReporteDiario({ id_llenadero, fecha, query }) {
         where: whereBase,
         include: [
             { model: Usuario, as: "Solicitante", attributes: ["nombre", "apellido"] },
+            { model: Usuario, as: "Aprobador", attributes: ["nombre", "apellido"] },
+            { model: Biometria, as: "Receptor", attributes: ["nombre"] },
             {
                 model: Vehiculo, required: false, attributes: ["placa"],
                 include: [
@@ -138,6 +141,7 @@ async function getReporteDiario({ id_llenadero, fecha, query }) {
             "id_solicitud", "codigo_ticket", "fecha_validacion",
             "cantidad_litros", "cantidad_despachada", "monto_total",
             "precio_unitario", "tipo_solicitud", "tipo_suministro", "placa", "marca", "modelo",
+            "id_aprobador", "id_receptor"
         ],
         order: [["id_solicitud", "ASC"]],
     });
@@ -164,6 +168,8 @@ async function getReporteDiario({ id_llenadero, fecha, query }) {
             fecha: v.fecha_validacion,
             hora: formatHora(v.fecha_validacion),
             solicitante: `${v.Solicitante?.nombre} ${v.Solicitante?.apellido}`,
+            aprobador: v.Aprobador ? `${v.Aprobador.nombre} ${v.Aprobador.apellido}` : "S/A",
+            recibido: v.Receptor ? v.Receptor.nombre : "S/R",
             ...formatVehiculo(v),
             dependencia: v.Dependencia?.nombre_dependencia,
             subdependencia: v.Subdependencia?.nombre,
@@ -184,6 +190,8 @@ async function getReporteDiario({ id_llenadero, fecha, query }) {
             fecha: i.fecha_validacion,
             hora: formatHora(i.fecha_validacion),
             solicitante: `${i.Solicitante?.nombre} ${i.Solicitante?.apellido}`,
+            aprobador: i.Aprobador ? `${i.Aprobador.nombre} ${i.Aprobador.apellido}` : "S/A",
+            recibido: i.Receptor ? i.Receptor.nombre : "S/R",
             ...formatVehiculo(i),
             dependencia: i.Dependencia?.nombre_dependencia,
             subdependencia: i.Subdependencia?.nombre,
@@ -271,12 +279,15 @@ async function fetchDespachos(where, query) {
                 ],
             },
             { model: Usuario, as: "Solicitante", attributes: ["nombre", "apellido"] },
+            { model: Usuario, as: "Aprobador", attributes: ["nombre", "apellido"] },
+            { model: Biometria, as: "Receptor", attributes: ["nombre"] },
             { model: Dependencia, as: "Dependencia", attributes: ["nombre_dependencia"] },
             { model: Subdependencia, as: "Subdependencia", attributes: ["nombre"] },
         ],
         attributes: [
             "id_solicitud", "codigo_ticket", "fecha_validacion",
             "cantidad_litros", "cantidad_despachada", "tipo_suministro", "placa", "marca", "modelo",
+            "id_aprobador", "id_receptor"
         ],
         order: [["fecha_validacion", "ASC"]],
     });
@@ -292,6 +303,8 @@ async function fetchDespachos(where, query) {
         dependencia: d.Dependencia?.nombre_dependencia,
         subdependencia: d.Subdependencia?.nombre,
         solicitante: `${d.Solicitante?.nombre} ${d.Solicitante?.apellido}`,
+        aprobador: d.Aprobador ? `${d.Aprobador.nombre} ${d.Aprobador.apellido}` : "S/A",
+        recibido: d.Receptor ? d.Receptor.nombre : "S/R",
         cantidad_aprobada: parseFloat(d.cantidad_litros),
         cantidad_despachada: parseFloat(d.cantidad_despachada || 0),
     }));
