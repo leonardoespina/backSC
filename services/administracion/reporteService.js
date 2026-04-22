@@ -63,10 +63,10 @@ function formatHora(fecha) {
 
 /**
  * Genera el reporte diario de un llenadero agrupado en INSTITUCIONAL y VENTA.
- * @param {{ id_llenadero: string, fecha: string, query: object }} opts
+ * @param {{ id_llenadero: string, fecha_desde: string, fecha_hasta: string, query: object }} opts
  */
-async function getReporteDiario({ id_llenadero, fecha, query }) {
-    const { start, end } = buildDateRange(fecha, fecha);
+async function getReporteDiario({ id_llenadero, fecha_desde, fecha_hasta, query }) {
+    const { start, end } = buildDateRange(fecha_desde, fecha_hasta);
 
     const whereBase = {
         id_llenadero,

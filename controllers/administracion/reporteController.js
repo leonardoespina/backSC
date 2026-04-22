@@ -15,13 +15,13 @@ const { Usuario } = require("../../models");
 // ─────────────────────────────────────────────
 exports.generarReporteDiario = async (req, res) => {
   try {
-    const { id_llenadero, fecha } = req.query;
+    const { id_llenadero, fecha_desde, fecha_hasta } = req.query;
 
-    if (!id_llenadero || !fecha) {
-      return res.status(400).json({ msg: "Faltan parámetros obligatorios (id_llenadero, fecha)." });
+    if (!id_llenadero || !fecha_desde || !fecha_hasta) {
+      return res.status(400).json({ msg: "Faltan parámetros obligatorios (id_llenadero, fecha_desde, fecha_hasta)." });
     }
 
-    const data = await getReporteDiario({ id_llenadero, fecha, query: req.query });
+    const data = await getReporteDiario({ id_llenadero, fecha_desde, fecha_hasta, query: req.query });
     res.json(data);
   } catch (error) {
     console.error("Error en reporte diario:", error);
