@@ -52,4 +52,12 @@ router.get(
   reporteController.obtenerSituacionCombustible,
 );
 
+// Ruta para el reporte de recepción de cisternas (cargas)
+router.get(
+  "/recepcion-cisternas",
+  autenticarUsuario,
+  authorizePermission(PERMISSIONS.VIEW_REPORTE_RECEPCION),
+  reporteController.obtenerReporteRecepcionCisterna,
+);
+
 module.exports = router;

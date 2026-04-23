@@ -15,6 +15,10 @@ const {
     CupoBase,
     Categoria,
     Biometria,
+    CargaCisterna,
+    Tanque,
+    Llenadero,
+    CargaCisternaTanque,
 } = require("../../models");
 const { Op } = require("sequelize");
 const sequelize = require("sequelize");
@@ -404,10 +408,120 @@ async function getCuposUsuario({ id_usuario, id_dependencia, periodo }) {
     }));
 }
 
+// ─────────────────────────────────────────────
+// REPORTE DE RECEPCIÓN DE CISTERNAS (CARGAS)
+// ─────────────────────────────────────────────
+
+/**
+ * Genera el reporte de recepción de combustibles agrupado por Llenadero y Tipo de Combustible.
+ */
+async function getReporteRecepcionCisterna({ fecha_desde, fecha_hasta, id_llenadero, id_tipo_combustible }) {
+    const { start, end } = buildDateRange(fecha_desde, fecha_hasta);
+
+    const where = {
+        estado: { [Op.notIn]: ["ANULADO", "ANULADA"] },
+        fecha_llegada: { [Op.between]: [start, end] },
+    };
+
+    if (isValidFilter(id_llenadero)) {
+        // Para filtrar por llenadero, necesitamos hacerlo a través de la relación con Tanque
+        // O más precisamente, filtrar las cargas cuyos tanques pertenezcan a ese llenadero.
+    }
+
+    if (isValidFilter(id_tipo_combustible)) {
+        where.id_tipo_combustible = id_tipo_combustible;
+    }
+
+    const cargas = await CargaCisterna.findAll({
+        where,
+        include: [
+            { model: TipoCombustible, as: "TipoCombustible", attributes: ["nombre"] },
+            {
+                model: CargaCisternaTanque, as: "tanques_descarga",
+                include: [{
+                    model: Tanque, as: "Tanque",
+                    include: [{ model: Llenadero, as: "Llenadero", attributes: ["nombre_llenadero", "id_llenadero"] }]
+                }]
+            },
+            {
+                model: Tanque, as: "Tanque", // Para cargas mono-tanque antiguas
+                include: [{ model: Llenadero, as: "Llenadero", attributes: ["nombre_llenadero", "id_llenadero"] }]
+            }
+        ],
+        order: [["fecha_llegada", "ASC"]],
+    });
+
+    // Agrupación manual para flexibilidad total
+    const gruposMap = new Map();
+
+    cargas.forEach(carga => {
+        // Determinar Llenadero (desde tanques_descarga o Tanque principal)
+        let llenaderoNombre = "Sin Llenadero";
+        let llenaderoId = 0;
+
+        if (carga.tanques_descarga && carga.tanques_descarga.length > 0) {
+            const firstTanque = carga.tanques_descarga[0].Tanque;
+            llenaderoNombre = firstTanque?.Llenadero?.nombre_llenadero || llenaderoNombre;
+            llenaderoId = firstTanque?.Llenadero?.id_llenadero || llenaderoId;
+        } else if (carga.Tanque) {
+            llenaderoNombre = carga.Tanque.Llenadero?.nombre_llenadero || llenaderoNombre;
+            llenaderoId = carga.Tanque.Llenadero?.id_llenadero || llenaderoId;
+        }
+
+        // Filtrar por id_llenadero si se proporcionó
+        if (isValidFilter(id_llenadero) && parseInt(id_llenadero) !== llenaderoId) return;
+
+        const combustible = carga.TipoCombustible?.nombre || "N/A";
+        const key = `${llenaderoId}-${combustible}`;
+
+        if (!gruposMap.has(key)) {
+            gruposMap.set(key, {
+                llenadero: llenaderoNombre,
+                combustible: combustible,
+                items: [],
+                total_litros: 0
+            });
+        }
+
+        const grupo = gruposMap.get(key);
+        const fechaObj = new Date(carga.fecha_llegada);
+        const mesNombre = fechaObj.toLocaleString("es-ES", { month: "long" }).toUpperCase();
+
+        // Destino (Tanques)
+        let destino = "N/A";
+        if (carga.tanques_descarga && carga.tanques_descarga.length > 0) {
+            destino = carga.tanques_descarga.map(t => t.Tanque?.nombre || t.id_tanque).join(", ");
+        } else if (carga.Tanque) {
+            destino = carga.Tanque.nombre;
+        }
+
+        grupo.items.push({
+            id: carga.id_carga,
+            placa: carga.placa_cisterna,
+            factura: carga.numero_guia,
+            fecha_factura: carga.fecha_emision || carga.fecha_llegada.toISOString().split('T')[0],
+            combustible: combustible,
+            mes: mesNombre,
+            litros: parseFloat(carga.litros_segun_guia),
+            destino: destino
+        });
+
+        grupo.total_litros += parseFloat(carga.litros_segun_guia);
+    });
+
+    // Convertir Map a Array y formatear totales
+    return Array.from(gruposMap.values()).map(g => ({
+        ...g,
+        total_litros: g.total_litros.toFixed(2),
+        items: g.items.map((item, index) => ({ ...item, nro: index + 1 }))
+    }));
+}
+
 module.exports = {
     getReporteDiario,
     buildDespachoWhere,
     fetchDespachos,
     getConsumoPorDependencia,
     getCuposUsuario,
+    getReporteRecepcionCisterna,
 };

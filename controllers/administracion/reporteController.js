@@ -6,6 +6,7 @@ const {
   fetchDespachos,
   getConsumoPorDependencia,
   getCuposUsuario,
+  getReporteRecepcionCisterna,
 } = require("../../services/administracion/reporteService");
 const { getSituacionCombustible } = require("../../services/administracion/reporteSituacionService");
 const { Usuario } = require("../../models");
@@ -158,5 +159,29 @@ exports.obtenerSituacionCombustible = async (req, res) => {
   } catch (error) {
     console.error("Error en situación de combustible:", error);
     res.status(500).json({ msg: "Error al generar el reporte de situación.", error: error.message });
+  }
+};
+// ─────────────────────────────────────────────
+// GET /api/reportes/recepcion-cisternas
+// ─────────────────────────────────────────────
+exports.obtenerReporteRecepcionCisterna = async (req, res) => {
+  try {
+    const { fecha_desde, fecha_hasta, id_llenadero, id_tipo_combustible } = req.query;
+
+    if (!fecha_desde || !fecha_hasta) {
+      return res.status(400).json({ msg: "Debe seleccionar un rango de fechas (Desde y Hasta)." });
+    }
+
+    const data = await getReporteRecepcionCisterna({
+      fecha_desde,
+      fecha_hasta,
+      id_llenadero,
+      id_tipo_combustible
+    });
+
+    res.json({ data });
+  } catch (error) {
+    console.error("Error en reporte de recepción de cisternas:", error);
+    res.status(500).json({ msg: "Error al generar el reporte de recepción.", error: error.message });
   }
 };
