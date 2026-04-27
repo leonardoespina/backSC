@@ -24,6 +24,7 @@ const PERMISSIONS = {
     REJECT_SOLICITUD: "reject_solicitud",
     REVERTIR_OPERACION: "revertir_operacion",
     TOGGLE_TANQUE_USO: "toggle_tanque_uso",
+    MANAGE_CONFIG_TI: "manage_config_ti",
 };
 
 const ROLE_PERMISSIONS = {
@@ -90,6 +91,13 @@ const ROLE_PERMISSIONS = {
         PERMISSIONS.VIEW_REPORTES_GLOB,
         PERMISSIONS.VIEW_MIS_CUPOS,
         PERMISSIONS.VIEW_MIS_DESPACHOS,
+    ],
+
+    TI: [
+        PERMISSIONS.MANAGE_CONFIG_TI,
+        PERMISSIONS.VIEW_SOLICITUDES,
+        PERMISSIONS.CREATE_SOLICITUD,
+        PERMISSIONS.REJECT_SOLICITUD,
     ],
 };
 
