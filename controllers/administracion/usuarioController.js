@@ -87,6 +87,7 @@ exports.actualizarUsuario = async (req, res) => {
     const usuario = await usuarioService.actualizarUsuario(
       id,
       req.body,
+      req.usuario,
       req.ip,
     );
 

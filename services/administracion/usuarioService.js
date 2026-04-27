@@ -27,6 +27,11 @@ exports.crearUsuario = async (data, adminUser, clientIp) => {
   } = data;
 
   return await executeTransaction(clientIp, async (t) => {
+    // 0. Validar permisos para AMBOS
+    if (capacidad_solicitudes === "AMBOS" && adminUser.cedula !== "root") {
+      throw new Error("Solo el superadministrador (root) puede asignar la capacidad AMBOS");
+    }
+
     // 1. Verificar Cédula Duplicada
     const existe = await Usuario.findOne({
       where: { cedula },
@@ -174,6 +179,10 @@ exports.obtenerUsuarios = async (query, user) => {
     where.estado = "ACTIVO";
   }
 
+  if (user && user.cedula !== "root") {
+    where.cedula = { [Op.ne]: "root" };
+  }
+
   return await paginate(Usuario, query, {
     where,
     searchableFields,
@@ -201,13 +210,25 @@ exports.obtenerUsuarios = async (query, user) => {
 /**
  * Actualizar Usuario
  */
-exports.actualizarUsuario = async (id, data, clientIp) => {
-  const { password, cedula, ...restoDatos } = data;
+exports.actualizarUsuario = async (id, data, currentUser, clientIp) => {
+  const { password, cedula, capacidad_solicitudes, ...restoDatos } = data;
 
   return await executeTransaction(clientIp, async (t) => {
     let usuario = await Usuario.findByPk(id, { transaction: t });
     if (!usuario) {
       throw new Error("Usuario no encontrado");
+    }
+
+    if (usuario.cedula === "root" && currentUser.cedula !== "root") {
+      throw new Error("No tienes permisos para modificar al superadministrador");
+    }
+
+    if (capacidad_solicitudes === "AMBOS" && currentUser.cedula !== "root") {
+      throw new Error("Solo el superadministrador (root) puede asignar la capacidad AMBOS");
+    }
+
+    if (capacidad_solicitudes) {
+      restoDatos.capacidad_solicitudes = capacidad_solicitudes;
     }
 
     if (cedula && cedula !== usuario.cedula) {
@@ -251,6 +272,10 @@ exports.desactivarUsuario = async (id, currentUser, clientIp) => {
 
     if (usuario.id_usuario === currentUser.id_usuario) {
       throw new Error("No puedes desactivar tu propio usuario administrador");
+    }
+
+    if (usuario.cedula === "root" && currentUser.cedula !== "root") {
+      throw new Error("No tienes permisos para desactivar al superadministrador");
     }
 
     await usuario.update(
