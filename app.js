@@ -27,7 +27,13 @@ const whitelist = process.env.CORS_ORIGINS
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
-    if (whitelist.indexOf(origin) !== -1) {
+    
+    const isAllowed = whitelist.indexOf(origin) !== -1 || 
+                      origin.endsWith('.lespina.info') || 
+                      origin.startsWith('http://10.60.0.') || 
+                      origin.startsWith('https://10.60.0.');
+
+    if (isAllowed) {
       callback(null, true);
     } else {
       console.warn(`[CORS Bloqueado] Origen no permitido: ${origin}`);
@@ -38,10 +44,15 @@ const corsOptions = {
   credentials: true,
 };
 
-// Configuración Socket.io
 const io = new Server(server, {
   cors: {
-    origin: whitelist,
+    origin: function (origin, callback) {
+      if (!origin || whitelist.indexOf(origin) !== -1 || origin.endsWith('.lespina.info') || origin.startsWith('http://10.60.0.') || origin.startsWith('https://10.60.0.')) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     credentials: true,
   },
