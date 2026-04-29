@@ -21,7 +21,7 @@ const server = http.createServer(app);
 // ============================================================
 // Obtener orígenes permitidos desde el .env (separados por coma)
 const whitelist = process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS.split(",")
+  ? process.env.CORS_ORIGINS.split(",").map(item => item.trim())
   : ["http://localhost:5173"];
 
 const corsOptions = {
@@ -30,7 +30,8 @@ const corsOptions = {
     if (whitelist.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      callback(new Error("No permitido por CORS"));
+      console.warn(`[CORS Bloqueado] Origen no permitido: ${origin}`);
+      callback(new Error(`No permitido por CORS: ${origin}`));
     }
   },
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
