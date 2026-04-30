@@ -25,6 +25,7 @@ const PERMISSIONS = {
     REVERTIR_OPERACION: "revertir_operacion",
     TOGGLE_TANQUE_USO: "toggle_tanque_uso",
     MANAGE_CONFIG_TI: "manage_config_ti",
+    MANAGE_VEHICULOS: "manage_vehiculos",
 };
 
 const ROLE_PERMISSIONS = {
@@ -95,6 +96,7 @@ const ROLE_PERMISSIONS = {
 
     TI: [
         PERMISSIONS.MANAGE_CONFIG_TI,
+        PERMISSIONS.MANAGE_VEHICULOS,
         PERMISSIONS.VIEW_SOLICITUDES,
         PERMISSIONS.CREATE_SOLICITUD,
         PERMISSIONS.REJECT_SOLICITUD,

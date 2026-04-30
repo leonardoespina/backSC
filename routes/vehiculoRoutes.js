@@ -24,11 +24,11 @@ router.get(
   vehiculoController.obtenerModelosPorMarca,
 );
 
-// POST /api/vehiculos - Crear (Solo ADMIN)
+// POST /api/vehiculos - Crear (ADMIN y TI)
 router.post(
   "/",
   [
-    authorizePermission(PERMISSIONS.MANAGE_SYSTEM),
+    authorizePermission(PERMISSIONS.MANAGE_VEHICULOS),
 
     check("id_marca", "La marca es obligatoria").isNumeric(),
     check("id_modelo", "El modelo es obligatorio").isNumeric(),
@@ -48,11 +48,11 @@ router.post(
   vehiculoController.crearVehiculo,
 );
 
-// PUT /api/vehiculos/:id - Modificar (Solo ADMIN)
+// PUT /api/vehiculos/:id - Modificar (ADMIN y TI)
 router.put(
   "/:id",
   [
-    authorizePermission(PERMISSIONS.MANAGE_SYSTEM),
+    authorizePermission(PERMISSIONS.MANAGE_VEHICULOS),
     check("placa", "La placa no puede estar vacía").optional().not().isEmpty(),
     check("id_categoria", "El ID de categoría debe ser numérico")
       .optional()
@@ -70,10 +70,10 @@ router.put(
   vehiculoController.actualizarVehiculo,
 );
 
-// DELETE /api/vehiculos/:id - Desactivar (Solo ADMIN)
+// DELETE /api/vehiculos/:id - Desactivar (ADMIN y TI)
 router.delete(
   "/:id",
-  [authorizePermission(PERMISSIONS.MANAGE_SYSTEM), validarCampos],
+  [authorizePermission(PERMISSIONS.MANAGE_VEHICULOS), validarCampos],
   vehiculoController.desactivarVehiculo,
 );
 
