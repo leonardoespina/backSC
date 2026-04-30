@@ -20,7 +20,7 @@ const moment = require("moment");
  * Listar solicitudes para despacho
  */
 exports.listarSolicitudesParaDespacho = async (query) => {
-  const { fecha_inicio, fecha_fin, sort, estado } = query;
+  const { fecha_inicio, fecha_fin, sort, estado, id_llenadero } = query;
 
   const where = {};
 
@@ -30,6 +30,11 @@ exports.listarSolicitudesParaDespacho = async (query) => {
     where.estado = estado;
   } else {
     where.estado = "APROBADA";
+  }
+
+  if (id_llenadero) {
+    where.id_llenadero = parseInt(id_llenadero, 10);
+    console.log(`[DESPACHO] Filtrando por id_llenadero: ${where.id_llenadero} (tipo: ${typeof where.id_llenadero})`);
   }
 
   if (fecha_inicio && fecha_fin) {
