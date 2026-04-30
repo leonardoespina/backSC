@@ -187,6 +187,33 @@ exports.generarReporteTurno = async (id_cierre) => {
         }
     }
 
+    // SOBRESCRIBIR stockInicial con el CIERRE ANTERIOR real (Para garantizar continuidad de la película)
+    const { Op } = require("sequelize");
+    const cierreAnterior = await CierreTurno.findOne({
+        where: { 
+            id_llenadero: cierre.id_llenadero, 
+            id_cierre: { [Op.lt]: cierre.id_cierre }, 
+            estado: "CERRADO" 
+        },
+        order: [["id_cierre", "DESC"]],
+        include: [
+            {
+                model: CierreTurnoMedicion,
+                as: "Mediciones",
+                include: [{ model: MedicionTanque, as: "MedicionCierre" }]
+            }
+        ]
+    });
+
+    if (cierreAnterior) {
+        for (const t of todosLosTanques) {
+            const medAnterior = cierreAnterior.Mediciones.find(m => m.id_tanque === t.id_tanque);
+            if (medAnterior && medAnterior.MedicionCierre?.volumen_real != null) {
+                stockInicial[t.id_tanque] = parseFloat(medAnterior.MedicionCierre.volumen_real);
+            }
+        }
+    }
+
     // Iteramos Hacia adelante ahora para mostrar la cascada
     const stockProgresivo = { ...stockInicial };
 
