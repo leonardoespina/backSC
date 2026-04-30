@@ -329,6 +329,8 @@ exports.obtenerRegistros = async (query, user) => {
   return await paginate(Biometria, query, {
     where,
     searchableFields,
+
+    attributes: { exclude: ['template'] },
     include: [
       { model: Categoria, as: "Categoria", attributes: ["nombre"] },
       {
