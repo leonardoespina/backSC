@@ -45,6 +45,10 @@ const corsOptions = {
 };
 
 const io = new Server(server, {
+  // Keepalive para Cloudflare Tunnel: enviar pings cada 25s
+  // Cloudflare corta conexiones WebSocket idle >100s sin tráfico
+  pingInterval: 25000,  // Ping cada 25s (bien por debajo del límite de Cloudflare)
+  pingTimeout: 60000,   // Esperar hasta 60s por la respuesta del ping
   cors: {
     origin: function (origin, callback) {
       if (!origin || whitelist.indexOf(origin) !== -1 || origin.endsWith('.lespina.info') || origin.startsWith('http://10.60.0.') || origin.startsWith('https://10.60.0.')) {

@@ -78,11 +78,18 @@ exports.imprimirTicket = async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error("CRITICAL ERROR in imprimirTicket:", error);
-    if (
-      error.message.includes("Faltan datos") ||
-      error.message.includes("debe estar Aprobada")
-    ) {
+    if (error.message.includes("Faltan datos")) {
       return res.status(400).json({ msg: error.message });
+    }
+    // IDEMPOTENCIA: red lenta → frontend reintenta → ticket ya existe → lo devolvemos
+    if (error.message.includes("debe estar Aprobada")) {
+      try {
+        const existing = await despachoService.reimprimirTicket(id);
+        console.warn(`[imprimirTicket] Solicitud ${id} ya estaba IMPRESA. Devolviendo ticket existente.`);
+        return res.json({ ...existing, idempotent: true });
+      } catch (_) {
+        return res.status(400).json({ msg: error.message });
+      }
     }
     if (error.message.includes("no encontrada")) {
       return res.status(404).json({ msg: error.message });
@@ -136,7 +143,7 @@ exports.despacharSolicitud = async (req, res) => {
     const rawIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip;
     // x-forwarded-for can be a comma-separated list of IPs, we take the first one
     const clientIp = typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : rawIp;
-    
+
     const result = await despachoService.despacharSolicitud(req.body, clientIp);
 
     if (req.io && result && result.solicitud) {
