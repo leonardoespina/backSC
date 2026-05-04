@@ -184,6 +184,10 @@ exports.generarCierre = async (data, user, clientIp) => {
             const volumen_antes = parseFloat(tanque.nivel_actual);
             const v_real = parseFloat(med.volumen_real);
 
+            if (isNaN(v_real) || v_real == null) {
+                throw new Error(`Volumen inválido detectado para el tanque ID ${med.id_tanque}. Verifique que el valor ingresado esté en la tabla de aforo.`);
+            }
+
             // Crear medición de cierre
             const medicionCierre = await MedicionTanque.create(
                 {
