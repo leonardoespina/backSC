@@ -12,6 +12,8 @@ require("dotenv").config();
 // 1. CARGAR MODELOS Y ASOCIACIONES (Carga Dinámica)
 // ============================================================
 const db = require("./models");
+const requestContext = require("./helpers/requestContext");
+
 
 const app = express();
 const server = http.createServer(app);
@@ -27,11 +29,11 @@ const whitelist = process.env.CORS_ORIGINS
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
-    
-    const isAllowed = whitelist.indexOf(origin) !== -1 || 
-                      origin.endsWith('.lespina.info') || 
-                      origin.startsWith('http://10.60.0.') || 
-                      origin.startsWith('https://10.60.0.');
+
+    const isAllowed = whitelist.indexOf(origin) !== -1 ||
+      origin.endsWith('.lespina.info') ||
+      origin.startsWith('http://10.60.0.') ||
+      origin.startsWith('https://10.60.0.');
 
     if (isAllowed) {
       callback(null, true);
@@ -129,7 +131,11 @@ io.on("connection", (socket) => {
 
 // Conexión BD e Inicialización del Servidor
 dbConnect()
-  .then(() => {
+  .then(async () => {
+    // ✅ Sincronizar triggers de auditoría (lista blanca)
+    const { ensureAuditTriggers } = require("./helpers/auditSetup");
+    await ensureAuditTriggers();
+
     // Inicializar Cron Jobs después de que la BD esté lista
     const initCronJobs = require("./scripts/cronJobs");
     initCronJobs(io);
@@ -149,6 +155,10 @@ dbConnect()
 app.use(helmet());
 const { antiBotMiddleware } = require("./middlewares/securityMiddleware");
 app.use(antiBotMiddleware);
+
+// Middleware de Contexto (IP y Usuario) para Auditoría Automática
+app.use(requestContext.middleware());
+
 
 // 2. CORS y Parseo de Body
 app.use(cors(corsOptions));
@@ -208,5 +218,6 @@ app.use(
 );
 app.use("/api/dashboard", require("./routes/dashboardRoutes"));
 app.use("/api/reportes", require("./routes/reporteRoutes"));
+app.use("/api/auditoria", require("./routes/auditoriaRoutes"));
 
 // (Inicialización movida dentro de la conexión a BD)
