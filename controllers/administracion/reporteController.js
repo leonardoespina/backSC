@@ -9,17 +9,35 @@ const {
   getReporteRecepcionCisterna,
 } = require("../../services/administracion/reporteService");
 const { getSituacionCombustible } = require("../../services/administracion/reporteSituacionService");
-const { Usuario } = require("../../models");
+const { hasPermission, PERMISSIONS } = require("../../utils/permissions");
 
 // ─────────────────────────────────────────────
 // GET /api/reportes/diario
 // ─────────────────────────────────────────────
 exports.generarReporteDiario = async (req, res) => {
   try {
-    const { id_llenadero, fecha_desde, fecha_hasta, tipo_reporte } = req.query;
+    let { id_llenadero, fecha_desde, fecha_hasta, tipo_reporte } = req.query;
 
     if (!id_llenadero || !fecha_desde || !fecha_hasta) {
       return res.status(400).json({ msg: "Faltan parámetros obligatorios (id_llenadero, fecha_desde, fecha_hasta)." });
+    }
+
+    const canViewInstitucional = hasPermission(req.usuario, PERMISSIONS.VIEW_REPORTE_DIARIO);
+    const canViewVentas = hasPermission(req.usuario, PERMISSIONS.VIEW_REPORTE_VENTAS);
+
+    // Si intenta ver ventas pero no tiene permiso, 403
+    if (tipo_reporte === "VENTA" && !canViewVentas) {
+      return res.status(403).json({ msg: "Acceso denegado: No tienes permiso para ver el reporte de ventas." });
+    }
+
+    // Si intenta ver institucional o todos pero no tiene permiso institucional, 403
+    // EXCEPCIÓN: Si el usuario es de VENTA y no especificó tipo, le forzamos VENTA
+    if ((tipo_reporte === "INSTITUCIONAL" || tipo_reporte === "TODOS" || !tipo_reporte) && !canViewInstitucional) {
+      if (canViewVentas) {
+        tipo_reporte = "VENTA"; // Autocorrección para usuarios de ventas
+      } else {
+        return res.status(403).json({ msg: "Acceso denegado: No tienes permiso para ver el reporte institucional." });
+      }
     }
 
     const data = await getReporteDiario({ id_llenadero, fecha_desde, fecha_hasta, tipo_reporte, query: req.query });

@@ -8,7 +8,7 @@ const { PERMISSIONS } = require("../utils/permissions");
 router.get(
   "/diario",
   autenticarUsuario,
-  authorizePermission(PERMISSIONS.VIEW_REPORTE_DIARIO),
+  authorizePermission([PERMISSIONS.VIEW_REPORTE_DIARIO, PERMISSIONS.VIEW_REPORTE_VENTAS]),
   reporteController.generarReporteDiario,
 );
 

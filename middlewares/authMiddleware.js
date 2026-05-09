@@ -86,6 +86,18 @@ const authorizePermission = (permission) => {
       return res.status(500).json({ msg: "Usuario no autenticado para verificar permisos" });
     }
 
+    // Si es un array, validamos que tenga AL MENOS UNO (Lógica OR)
+    if (Array.isArray(permission)) {
+      const hasAny = permission.some(p => hasPermission(req.usuario, p));
+      if (!hasAny) {
+        return res.status(403).json({
+          msg: `Acceso denegado: No posees ninguna de las capacidades requeridas (${permission.join(", ")}) para realizar esta acción.`,
+        });
+      }
+      return next();
+    }
+
+    // Comportamiento estándar para un solo permiso
     if (!hasPermission(req.usuario, permission)) {
       return res.status(403).json({
         msg: `Acceso denegado: No posees la capacidad requerida (${permission}) para realizar esta acción.`,
