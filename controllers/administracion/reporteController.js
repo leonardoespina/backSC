@@ -41,7 +41,14 @@ exports.generarReporteDiario = async (req, res) => {
       }
     }
 
-    const data = await getReporteDiario({ id_llenadero, fecha_desde, fecha_hasta, tipo_reporte, query: req.query });
+    const data = await getReporteDiario({ 
+      id_llenadero, 
+      fecha_desde, 
+      fecha_hasta, 
+      tipo_reporte, 
+      query: req.query,
+      user: req.usuario 
+    });
     res.json(data);
   } catch (error) {
     console.error("Error en reporte diario:", error);

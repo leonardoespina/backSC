@@ -23,6 +23,7 @@ const {
 const { Op } = require("sequelize");
 const sequelize = require("sequelize");
 const { paginate } = require("../../helpers/paginationHelper");
+const { hasPermission, PERMISSIONS } = require("../../utils/permissions");
 
 // ─────────────────────────────────────────────
 // HELPERS INTERNOS
@@ -69,8 +70,10 @@ function formatHora(fecha) {
  * Genera el reporte diario de un llenadero agrupado en INSTITUCIONAL y VENTA.
  * @param {{ id_llenadero: string, fecha_desde: string, fecha_hasta: string, query: object }} opts
  */
-async function getReporteDiario({ id_llenadero, fecha_desde, fecha_hasta, tipo_reporte, query }) {
+async function getReporteDiario({ id_llenadero, fecha_desde, fecha_hasta, tipo_reporte, query, user }) {
     const { start, end } = buildDateRange(fecha_desde, fecha_hasta);
+
+    const canViewFinancialData = hasPermission(user, PERMISSIONS.VIEW_REPORTE_VENTAS);
 
     const whereBase = {
         id_llenadero,
@@ -167,7 +170,7 @@ async function getReporteDiario({ id_llenadero, fecha_desde, fecha_hasta, tipo_r
         const simbolo = v.PrecioCombustible?.Moneda?.simbolo || (v.id_precio ? "N/A" : "$");
 
         const saldo_favor = cant_desp < cant_solic ? (cant_solic - cant_desp) * precio : 0;
-        if (saldo_favor > 0) {
+        if (canViewFinancialData && saldo_favor > 0) {
             saldosPorMoneda[simbolo] = (saldosPorMoneda[simbolo] || 0) + saldo_favor;
         }
 
@@ -185,10 +188,11 @@ async function getReporteDiario({ id_llenadero, fecha_desde, fecha_hasta, tipo_r
             cant_solic: v.cantidad_litros,
             cant_desp: v.cantidad_despachada,
             tipo_combustible: v.TipoCombustible?.nombre || "S/I",
-            precio: v.PrecioCombustible?.precio || v.precio_unitario,
-            total_pagar: v.monto_total,
-            moneda: simbolo,
-            saldo_favor: saldo_favor.toFixed(2),
+            // PROTECCIÓN DE DATOS FINANCIEROS
+            precio: canViewFinancialData ? (v.PrecioCombustible?.precio || v.precio_unitario) : 0,
+            total_pagar: canViewFinancialData ? v.monto_total : 0,
+            moneda: canViewFinancialData ? simbolo : "",
+            saldo_favor: canViewFinancialData ? saldo_favor.toFixed(2) : "0.00",
         };
     });
 
@@ -227,10 +231,11 @@ async function getReporteDiario({ id_llenadero, fecha_desde, fecha_hasta, tipo_r
     if (!tipo_reporte || tipo_reporte === 'VENTA' || tipo_reporte === 'TODOS') {
         resultData.venta = ventasMapped;
         resultData.totales.litros_venta = (parseFloat(totalVentaLitros) || 0).toFixed(2);
-        resultData.totales.monto_venta = (parseFloat(totalVentaMonto) || 0).toFixed(2);
-        resultData.totales.resumen_saldos = Object.entries(saldosPorMoneda).map(([moneda, total]) => ({
+        // PROTECCIÓN DE DATOS FINANCIEROS EN TOTALES
+        resultData.totales.monto_venta = canViewFinancialData ? (parseFloat(totalVentaMonto) || 0).toFixed(2) : "0.00";
+        resultData.totales.resumen_saldos = canViewFinancialData ? Object.entries(saldosPorMoneda).map(([moneda, total]) => ({
             moneda, total: total.toFixed(2),
-        }));
+        })) : [];
     }
 
     return resultData;
