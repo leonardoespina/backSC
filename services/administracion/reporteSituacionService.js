@@ -14,15 +14,6 @@ const { Tanque, Llenadero, TipoCombustible, MovimientoInventario } = require("..
 const { Op, fn, col, literal } = require("sequelize");
 const { sequelize } = require("../../config/database");
 
-/**
- * Construye un rango de fechas en UTC-4 (Venezuela).
- */
-function buildDateRange(fecha_desde, fecha_hasta) {
-    return {
-        start: new Date(`${fecha_desde}T00:00:00-04:00`),
-        end:   new Date(`${fecha_hasta}T23:59:59.999-04:00`),
-    };
-}
 
 /**
  * Obtiene la situación del combustible agrupada por Llenadero y TipoCombustible.
@@ -35,8 +26,6 @@ async function getSituacionCombustible({ fecha_desde, fecha_hasta } = {}) {
     const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Caracas" });
     const desde = fecha_desde || hoy;
     const hasta  = fecha_hasta  || hoy;
-
-    const { start, end } = buildDateRange(desde, hasta);
 
     // ─── 1. Stock actual y capacidad por Llenadero + TipoCombustible ───────────
     const stockRows = await Tanque.findAll({
@@ -77,14 +66,15 @@ async function getSituacionCombustible({ fecha_desde, fecha_hasta } = {}) {
             COALESCE(SUM(ABS(mi.variacion)), 0) AS consumido_periodo
         FROM movimientos_inventario mi
         INNER JOIN tanques t ON t.id_tanque = mi.id_tanque
+        INNER JOIN cierres_turno ct ON mi.id_cierre_turno = ct.id_cierre
         WHERE
             mi.tipo_movimiento = 'DESPACHO'
-            AND mi.fecha_movimiento BETWEEN :start AND :end
+            AND ct.fecha_lote BETWEEN :desde AND :hasta
             AND t.estado = 'ACTIVO'
         GROUP BY t.id_llenadero, t.id_tipo_combustible
         `,
         {
-            replacements: { start, end },
+            replacements: { desde, hasta },
             type: sequelize.QueryTypes.SELECT,
         }
     );

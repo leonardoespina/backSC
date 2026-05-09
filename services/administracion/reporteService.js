@@ -69,17 +69,22 @@ function formatHora(fecha) {
  * Genera el reporte diario de un llenadero agrupado en INSTITUCIONAL y VENTA.
  * @param {{ id_llenadero: string, fecha_desde: string, fecha_hasta: string, query: object }} opts
  */
-async function getReporteDiario({ id_llenadero, fecha_desde, fecha_hasta, query }) {
+async function getReporteDiario({ id_llenadero, fecha_desde, fecha_hasta, tipo_reporte, query }) {
     const { start, end } = buildDateRange(fecha_desde, fecha_hasta);
 
     const whereBase = {
         id_llenadero,
+
         [Op.or]: [
             { fecha_despacho: { [Op.between]: [start, end] } },
             { [Op.and]: [{ fecha_despacho: null }, { fecha_solicitud: { [Op.between]: [start, end] } }] },
         ],
         estado: "FINALIZADA",
     };
+
+    if (tipo_reporte && tipo_reporte !== 'TODOS') {
+        whereBase.tipo_solicitud = tipo_reporte;
+    }
 
     // Totales agrupados por Combustible y Tipo de Solicitud
     const agrupados = await Solicitud.findAll({
@@ -187,8 +192,21 @@ async function getReporteDiario({ id_llenadero, fecha_desde, fecha_hasta, query 
         };
     });
 
-    return {
-        institucional: institucionalData.map((i) => ({
+    const resultData = {
+        pagination: result.pagination,
+        totales: {
+            total_litros: ((parseFloat(totalInstitucional) || 0) + (parseFloat(totalVentaLitros) || 0)).toFixed(2),
+            por_combustible: Object.entries(totalesPorCombustible).map(([combustible, totales]) => ({
+                combustible,
+                institucional: totales.institucional.toFixed(2),
+                venta: totales.venta.toFixed(2),
+                total: totales.total.toFixed(2)
+            }))
+        }
+    };
+
+    if (!tipo_reporte || tipo_reporte === 'INSTITUCIONAL' || tipo_reporte === 'TODOS') {
+        resultData.institucional = institucionalData.map((i) => ({
             id_solicitud: i.id_solicitud,
             codigo_ticket: i.codigo_ticket,
             fecha: i.fecha_validacion,
@@ -202,27 +220,20 @@ async function getReporteDiario({ id_llenadero, fecha_desde, fecha_hasta, query 
             tipo_combustible: i.TipoCombustible?.nombre || "S/I",
             cant_solic: i.cantidad_litros,
             cant_desp: i.cantidad_despachada,
-        })),
-        venta: ventasMapped,
-        pagination: result.pagination,
-        totales: {
-            litros_institucional: (parseFloat(totalInstitucional) || 0).toFixed(2),
-            litros_venta: (parseFloat(totalVentaLitros) || 0).toFixed(2),
-            monto_venta: (parseFloat(totalVentaMonto) || 0).toFixed(2),
-            total_litros: (
-                (parseFloat(totalInstitucional) || 0) + (parseFloat(totalVentaLitros) || 0)
-            ).toFixed(2),
-            resumen_saldos: Object.entries(saldosPorMoneda).map(([moneda, total]) => ({
-                moneda, total: total.toFixed(2),
-            })),
-            por_combustible: Object.entries(totalesPorCombustible).map(([combustible, totales]) => ({
-                combustible,
-                institucional: totales.institucional.toFixed(2),
-                venta: totales.venta.toFixed(2),
-                total: totales.total.toFixed(2)
-            }))
-        },
-    };
+        }));
+        resultData.totales.litros_institucional = (parseFloat(totalInstitucional) || 0).toFixed(2);
+    }
+
+    if (!tipo_reporte || tipo_reporte === 'VENTA' || tipo_reporte === 'TODOS') {
+        resultData.venta = ventasMapped;
+        resultData.totales.litros_venta = (parseFloat(totalVentaLitros) || 0).toFixed(2);
+        resultData.totales.monto_venta = (parseFloat(totalVentaMonto) || 0).toFixed(2);
+        resultData.totales.resumen_saldos = Object.entries(saldosPorMoneda).map(([moneda, total]) => ({
+            moneda, total: total.toFixed(2),
+        }));
+    }
+
+    return resultData;
 }
 
 // ─────────────────────────────────────────────
