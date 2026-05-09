@@ -6,7 +6,7 @@
  * y los triggers de cada tabla estén correctamente configurados.
  */
 const { sequelize } = require("../config/database");
-const { TABLAS_AUDITADAS } = require("../constants/auditoriaConstants");
+const { TABLAS_AUDITADAS, COLUMNAS_EXCLUIDAS } = require("../constants/auditoriaConstants");
 
 async function ensureAuditTriggers() {
     try {
@@ -76,7 +76,19 @@ async function ensureAuditTriggers() {
                 old_json := CASE WHEN TG_OP = 'INSERT' THEN NULL ELSE row_to_json(OLD)::JSONB END;
                 new_json := CASE WHEN TG_OP = 'DELETE' THEN NULL ELSE row_to_json(NEW)::JSONB END;
 
-                -- 3. Optimización: No auditar UPDATEs sin cambios
+                -- 3. Excluir columnas especificadas en los argumentos del trigger (si existen)
+                IF TG_NARGS > 0 THEN
+                    FOR i IN 0 .. TG_NARGS - 1 LOOP
+                        IF old_json IS NOT NULL THEN
+                            old_json := old_json - TG_ARGV[i];
+                        END IF;
+                        IF new_json IS NOT NULL THEN
+                            new_json := new_json - TG_ARGV[i];
+                        END IF;
+                    END LOOP;
+                END IF;
+
+                -- 4. Optimización: No auditar UPDATEs sin cambios
                 IF TG_OP = 'UPDATE' AND old_json = new_json THEN
                     RETURN NEW;
                 END IF;
@@ -142,10 +154,13 @@ async function ensureAuditTriggers() {
         // Asegurar triggers en la lista blanca
         for (const table of TABLAS_AUDITADAS) {
             await sequelize.query(`DROP TRIGGER IF EXISTS trg_audit_${table} ON "${table}"`);
+            const columnasAExcluir = COLUMNAS_EXCLUIDAS[table] || [];
+            const args = columnasAExcluir.map(col => `'${col}'`).join(', ');
+
             await sequelize.query(`
                 CREATE TRIGGER trg_audit_${table}
                 AFTER INSERT OR UPDATE OR DELETE ON "${table}"
-                FOR EACH ROW EXECUTE FUNCTION audit_trigger_func();
+                FOR EACH ROW EXECUTE FUNCTION audit_trigger_func(${args});
             `);
             instalados++;
         }

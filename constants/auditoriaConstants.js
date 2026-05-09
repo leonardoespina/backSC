@@ -13,8 +13,15 @@ const TABLAS_AUDITADAS = [
     "monedas",
     "precios_combustible",
     "recarga_cupo",
-    "tanques",
     "tipo_combustible",
 ];
 
-module.exports = { TABLAS_AUDITADAS };
+/**
+ * Columnas específicas que deben omitirse de la auditoría para cada tabla.
+ * Útil para campos pesados (blobs, templates, imágenes) o sensibles.
+ */
+const COLUMNAS_EXCLUIDAS = {
+    "biometria": ["template"],
+};
+
+module.exports = { TABLAS_AUDITADAS, COLUMNAS_EXCLUIDAS };
