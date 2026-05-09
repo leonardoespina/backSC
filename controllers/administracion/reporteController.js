@@ -9,6 +9,7 @@ const {
   getReporteRecepcionCisterna,
 } = require("../../services/administracion/reporteService");
 const { getSituacionCombustible } = require("../../services/administracion/reporteSituacionService");
+const { Usuario } = require("../../models");
 const { hasPermission, PERMISSIONS } = require("../../utils/permissions");
 
 // ─────────────────────────────────────────────
