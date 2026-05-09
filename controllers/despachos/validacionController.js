@@ -7,9 +7,7 @@ exports.consultarTicket = async (req, res) => {
   const { codigo } = req.params;
 
   try {
-    const rawIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip;
-    const clientIp = typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : rawIp;
-
+    const clientIp = req.clientIp || req.ip;
     const result = await validacionService.consultarTicket(codigo, clientIp);
     res.json(result);
   } catch (error) {
@@ -35,9 +33,7 @@ exports.consultarTicket = async (req, res) => {
  */
 exports.finalizarTicket = async (req, res) => {
   try {
-    const rawIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip;
-    const clientIp = typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : rawIp;
-
+    const clientIp = req.clientIp || req.ip;
     const result = await validacionService.finalizarTicket(
       req.body,
       req.usuario,

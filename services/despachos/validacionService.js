@@ -13,6 +13,8 @@ const {
 const { executeTransaction } = require("../../helpers/transactionHelper");
 const moment = require("moment");
 const { Op } = require("sequelize");
+const { validateLlenaderoOrigin } = require("../../middlewares/originMiddleware");
+const requestContext = require("../../helpers/requestContext");
 
 /**
  * Consultar datos de un Ticket para validación
@@ -48,23 +50,8 @@ exports.consultarTicket = async (codigo, clientIp) => {
   // VALIDACIÓN DE RED: Verificar que la terminal que escanea
   // pertenece al segmento de red del llenadero del ticket.
   // =========================================================
-  if (solicitud.Llenadero && solicitud.Llenadero.direccion_ip) {
-    const ipsValidas = solicitud.Llenadero.direccion_ip
-      .split(',')
-      .map(ip => ip.trim())
-      .filter(ip => ip);
-
-    if (ipsValidas.length > 0) {
-      const ipValida = ipsValidas.some(ip => clientIp && clientIp.includes(ip));
-      if (!ipValida) {
-        const error = new Error(
-          `Este ticket pertenece al Llenadero '${solicitud.Llenadero.nombre_llenadero}' y no puede ser procesado desde esta terminal (Red: ${clientIp || 'Desconocida'}).`
-        );
-        error.status = 403;
-        throw error;
-      }
-    }
-  }
+  const context = requestContext.get();
+  validateLlenaderoOrigin(solicitud.Llenadero, clientIp, context?.gateway || 'UNKNOWN');
 
   // Validar estado
   if (solicitud.estado === "FINALIZADA") {
@@ -118,27 +105,8 @@ exports.finalizarTicket = async (data, user, clientIp) => {
     }
 
     // Validar configuración de red (IP) del Llenadero A/B
-    console.log("=== DEBUG IP LLENADERO FINALIZACION ===");
-    console.log("Ticket del Llenadero:", solicitud.Llenadero?.nombre_llenadero);
-    console.log("IP configurada en BD para este Llenadero:", solicitud.Llenadero?.direccion_ip);
-    console.log("IP detectada de la terminal (clientIp):", clientIp);
-
-    if (solicitud.Llenadero && solicitud.Llenadero.direccion_ip) {
-       const ipsValidas = solicitud.Llenadero.direccion_ip.split(',').map(ip => ip.trim()).filter(ip => ip);
-       console.log("IPs Segmentos válidos procesados:", ipsValidas);
-
-       if (ipsValidas.length > 0) {
-          const ipValida = ipsValidas.some(ip => clientIp && clientIp.includes(ip));
-          console.log("¿Es válida la IP actual?:", ipValida);
-
-          if (!ipValida) {
-             throw new Error(`Seguridad Llenadero: El ticket pertenece a '${solicitud.Llenadero.nombre_llenadero}' y no puede ser finalizado desde una terminal no autorizada (IP: ${clientIp || 'Desconocida'}).`);
-          }
-       }
-    } else {
-       console.log("No hay Llenadero asociado o no tiene IP configurada. Bypass de seguridad.");
-    }
-    console.log("==========================");
+    const context = requestContext.get();
+    validateLlenaderoOrigin(solicitud.Llenadero, clientIp, context?.gateway || 'UNKNOWN');
 
     const cantidadAprobada = parseFloat(solicitud.cantidad_litros);
     const cantidadReal = parseFloat(cantidad_real_cargada);

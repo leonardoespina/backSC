@@ -44,7 +44,8 @@ class RequestContext {
     middleware() {
         return (req, res, next) => {
             const data = {
-                ip: req.ip || req.connection?.remoteAddress || "127.0.0.1",
+                ip: req.clientIp || req.ip || "127.0.0.1",
+                gateway: req.gateway || "UNKNOWN",
                 usuario: req.usuario || null,
             };
             this.run(data, next);

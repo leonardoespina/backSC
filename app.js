@@ -16,6 +16,7 @@ const requestContext = require("./helpers/requestContext");
 
 
 const app = express();
+app.set("trust proxy", true); // Confía en los encabezados X-Forwarded-For (Cloudflare/Proxy)
 const server = http.createServer(app);
 
 // ============================================================
@@ -151,10 +152,12 @@ dbConnect()
   });
 
 // Middlewares
-// 1. Capa de Seguridad (Helmet + Anti-bots)
+// 1. Capa de Seguridad (Helmet + Anti-bots + Identificación de Origen)
 app.use(helmet());
 const { antiBotMiddleware } = require("./middlewares/securityMiddleware");
+const { originMiddleware } = require("./middlewares/originMiddleware");
 app.use(antiBotMiddleware);
+app.use(originMiddleware);
 
 // Middleware de Contexto (IP y Usuario) para Auditoría Automática
 app.use(requestContext.middleware());

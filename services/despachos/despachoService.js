@@ -15,6 +15,8 @@ const { executeTransaction } = require("../../helpers/transactionHelper");
 const biometriaService = require("./biometriaService");
 const { Op } = require("sequelize");
 const moment = require("moment");
+const { validateLlenaderoOrigin } = require("../../middlewares/originMiddleware");
+const requestContext = require("../../helpers/requestContext");
 
 /**
  * Listar solicitudes para despacho
@@ -406,30 +408,8 @@ exports.despacharSolicitud = async (data, clientIp) => {
     }
 
     // Validar configuración de red (IP) del Llenadero A/B
-    console.log("=== DEBUG IP LLENADERO ===");
-    console.log("Ticket del Llenadero:", solicitud.Llenadero?.nombre_llenadero);
-    console.log("IP configurada en BD para este Llenadero:", solicitud.Llenadero?.direccion_ip);
-    console.log("IP detectada de la terminal (clientIp):", clientIp);
-
-    if (solicitud.Llenadero && solicitud.Llenadero.direccion_ip) {
-      const ipsValidas = solicitud.Llenadero.direccion_ip.split(',').map(ip => ip.trim()).filter(ip => ip);
-      console.log("IPs Segmentos válidos procesados:", ipsValidas);
-
-      if (ipsValidas.length > 0) {
-        // Extraemos usando includes para ignorar variaciones de loopback o ipv6 (e.g. ::ffff:)
-        const ipValida = ipsValidas.some(ip => clientIp && clientIp.includes(ip));
-        console.log("¿Es válida la IP actual?:", ipValida);
-
-        if (!ipValida) {
-          throw new Error(`Seguridad Llenadero: El ticket pertenece a '${solicitud.Llenadero.nombre_llenadero}' y no puede ser finalizado desde una terminal no autorizada (IP: ${clientIp || 'Desconocida'}).`);
-        }
-      } else {
-        console.log("El Llenadero tiene el campo direccion_ip vacío o con formato inválido.");
-      }
-    } else {
-      console.log("No hay Llenadero asociado o no tiene IP configurada. Bypass de seguridad.");
-    }
-    console.log("==========================");
+    const context = requestContext.get();
+    validateLlenaderoOrigin(solicitud.Llenadero, clientIp, context?.gateway || 'UNKNOWN');
 
     const tanqueActivo = await Tanque.findOne({
       where: {

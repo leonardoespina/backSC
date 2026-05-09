@@ -140,9 +140,7 @@ exports.reimprimirTicket = async (req, res) => {
  */
 exports.despacharSolicitud = async (req, res) => {
   try {
-    const rawIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip;
-    // x-forwarded-for can be a comma-separated list of IPs, we take the first one
-    const clientIp = typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : rawIp;
+    const clientIp = req.clientIp || req.ip;
 
     const result = await despachoService.despacharSolicitud(req.body, clientIp);
 
