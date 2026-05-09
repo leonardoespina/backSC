@@ -13,42 +13,47 @@ const TUNNEL_DOMAIN = process.env.TUNNEL_DOMAIN || 'combustible.lespina.info';
 const PUBLIC_GATEWAY_IP = process.env.PUBLIC_GATEWAY_IP || '201.249.162.214';
 
 const originMiddleware = (req, res, next) => {
-    const host = req.headers.host || '';
-    const ip = req.ip || '';
-    
-    // Normalizar IP (quitar prefijos de IPv6 y espacios)
-    const clientIp = ip.replace(/^.*:/, '').trim();
+    try {
+        const host = req.headers.host || '';
+        const ip = req.ip || '';
+        
+        // Normalizar IP (quitar prefijos de IPv6 y espacios)
+        const clientIp = ip.replace(/^.*:/, '').trim();
 
-    let gateway = 'EXTERNO';
-    let isInternal = false;
+        let gateway = 'EXTERNO';
+        let isInternal = false;
 
-    // 1. Detección Inteligente de Red Local (VPN/LAN)
-    const matchesInternal = INTERNAL_NETWORKS.some(segment => clientIp.startsWith(segment));
-    
-    if (matchesInternal || clientIp === '127.0.0.1' || clientIp === 'localhost') {
-        gateway = 'LOCAL';
-        isInternal = true;
+        // 1. Detección Inteligente de Red Local (VPN/LAN) o IP Pública de la Sede
+        const matchesInternal = INTERNAL_NETWORKS.some(segment => clientIp.startsWith(segment));
+        const isPublicStation = clientIp === PUBLIC_GATEWAY_IP;
+        
+        if (matchesInternal || isPublicStation || clientIp === '127.0.0.1' || clientIp === 'localhost') {
+            gateway = isPublicStation ? 'LOCAL_VIA_PUBLIC' : 'LOCAL';
+            isInternal = true;
+        }
+        // 2. Detección de Túnel (Prioriza encabezados de Cloudflare si existen)
+        else if (host.includes(TUNNEL_DOMAIN) || req.headers['cf-ray'] || req.headers['cf-connecting-ip']) {
+            gateway = 'TUNNEL';
+        }
+        // 3. Detección de IP Pública Directa (Otra IP pública distinta a la de la sede)
+        else if (host.includes(PUBLIC_GATEWAY_IP) || clientIp === PUBLIC_GATEWAY_IP) {
+            gateway = 'PUBLIC_IP';
+        }
+
+        // Adjuntar metadatos de origen a la petición
+        req.gateway = gateway;
+        req.isInternal = isInternal;
+        req.clientIp = clientIp;
+
+        // Log para auditoría y depuración
+        console.log(`[Gateway] ${gateway} | IP: ${clientIp} | Host: ${host} | Internal: ${isInternal}`);
+
+        next();
+    } catch (error) {
+        console.error("[GatewayError] Error en originMiddleware:", error);
+        req.gateway = 'ERROR';
+        next();
     }
-    // 2. Detección de Túnel (Prioriza encabezados de Cloudflare si existen)
-    else if (host.includes(TUNNEL_DOMAIN) || req.headers['cf-ray'] || req.headers['cf-connecting-ip']) {
-        gateway = 'TUNNEL';
-    }
-    // 3. Detección de IP Pública Directa
-    else if (host.includes(PUBLIC_GATEWAY_IP) || clientIp === PUBLIC_GATEWAY_IP) {
-        gateway = 'PUBLIC_IP';
-    }
-
-    // Adjuntar metadatos de origen a la petición
-    req.gateway = gateway;
-    req.isInternal = isInternal;
-    req.clientIp = clientIp;
-
-    // Logging preventivo en desarrollo
-    if (process.env.NODE_ENV === 'development') {
-        console.log(`[SmartGateway] ${gateway} | IP: ${clientIp} | Host: ${host} | Internal: ${isInternal}`);
-    }
-
-    next();
 };
 
 /**
@@ -70,7 +75,7 @@ const isIpInSegment = (clientIp, segments) => {
  * @throws {Error} Si el origen no es válido.
  */
 const validateLlenaderoOrigin = (llenadero, clientIp, gateway) => {
-    if (!llenadero) return; // Si no hay llenadero, no podemos validar
+    if (!llenadero) return;
 
     const configIp = llenadero.direccion_ip;
     if (!configIp) {
@@ -78,20 +83,27 @@ const validateLlenaderoOrigin = (llenadero, clientIp, gateway) => {
         return;
     }
 
-    // Si es local, validamos segmento
-    if (gateway === 'LOCAL') {
+    // 1. Caso: Origen LOCAL o IP Pública de la Sede reconocida
+    if (gateway === 'LOCAL' || gateway === 'LOCAL_VIA_PUBLIC') {
+        // Si venimos por la IP pública de la sede, confiamos en que el usuario 
+        // está físicamente en la estación y permitimos la operación.
+        if (gateway === 'LOCAL_VIA_PUBLIC') {
+            console.log(`[Seguridad] Acceso concedido vía IP Pública de Sede: ${clientIp}`);
+            return;
+        }
+
+        // Si es red local pura (10.x), validamos el segmento específico del llenadero
         if (!isIpInSegment(clientIp, configIp)) {
             const error = new Error(`Seguridad Llenadero: Esta terminal (IP: ${clientIp}) no está autorizada para operar en '${llenadero.nombre_llenadero}'.`);
             error.status = 403;
             throw error;
         }
     } 
-    // Si viene por túnel o IP pública, podríamos aplicar reglas adicionales
-    // por ahora permitimos si el segmento coincide (ej. si la IP pública está permitida)
+    // 2. Caso: Origen EXTERNO (Túnel desde fuera o IP pública desconocida)
     else {
+        // En acceso externo, solo permitimos si la IP del cliente está explícitamente 
+        // en la lista blanca del llenadero.
         if (!isIpInSegment(clientIp, configIp)) {
-             // Si el llenadero está configurado con un segmento 10.x, pero la petición es EXTERNA,
-             // bloqueamos a menos que se permita explícitamente el gateway.
              const error = new Error(`Acceso Remoto Bloqueado: El llenadero '${llenadero.nombre_llenadero}' solo permite operaciones desde su red local (${configIp}). Origen detectado: ${gateway} (${clientIp}).`);
              error.status = 403;
              throw error;
