@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const { Usuario, Dependencia } = require("../models");
+const requestContext = require("../helpers/requestContext");
 
 const autenticarUsuario = async (req, res, next) => {
   const token = req.header("Authorization")?.split(" ")[1];
@@ -46,7 +47,14 @@ const autenticarUsuario = async (req, res, next) => {
 
     // Guardamos el objeto completo del usuario para tener los datos frescos (como dependencias)
     req.usuario = usuarioBD;
-    next();
+
+    // Establecer contexto asíncrono para que executeTransaction 
+    // pueda acceder al usuario SIN necesidad de pasarlo como parámetro
+    // en cada llamada desde los servicios
+    requestContext.run({
+      ip: req.ip || req.connection?.remoteAddress || "127.0.0.1",
+      usuario: req.usuario,
+    }, next);
   } catch (error) {
     console.error("Error en authMiddleware:", error.message);
     res.status(401).json({ msg: "Token no válido" });

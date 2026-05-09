@@ -11,10 +11,10 @@ router.use(autenticarUsuario);
 router.get("/", authorizePermission(PERMISSIONS.VIEW_OPERACIONES_TANQUES), medicionController.listarMediciones);
 
 // Crear Medición
-router.post("/", authorizePermission(PERMISSIONS.MANAGE_OPERACIONES_TANQUES), medicionController.crearMedicion);
+router.post("/", authorizePermission(PERMISSIONS.CREATE_MEDICION), medicionController.crearMedicion);
 
 // Actualizar Medición
-router.put("/:id", authorizePermission(PERMISSIONS.MANAGE_OPERACIONES_TANQUES), medicionController.actualizarMedicion);
+router.put("/:id", authorizePermission(PERMISSIONS.CREATE_MEDICION), medicionController.actualizarMedicion);
 
 // Anular Medición (Revertir)
 router.put("/:id/anular", authorizePermission(PERMISSIONS.REVERTIR_OPERACION), medicionController.anularMedicion);

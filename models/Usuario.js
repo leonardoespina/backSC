@@ -49,7 +49,8 @@ const Usuario = sequelize.define(
         "SEGURIDAD",
         "INSPECTOR",
         "PRESIDENCIA",
-        "TI"
+        "TI",
+        "VENTA"
       ),
       allowNull: false,
       defaultValue: "ESTANDAR",

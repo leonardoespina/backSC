@@ -14,10 +14,10 @@ router.get("/", authorizePermission(PERMISSIONS.VIEW_OPERACIONES_TANQUES), trans
 router.get("/:id", authorizePermission(PERMISSIONS.VIEW_OPERACIONES_TANQUES), transferenciaController.obtenerTransferenciaPorId);
 
 // Crear Transferencia
-router.post("/", authorizePermission(PERMISSIONS.MANAGE_OPERACIONES_TANQUES), transferenciaController.crearTransferencia);
+router.post("/", authorizePermission(PERMISSIONS.CREATE_TRANSFERENCIA), transferenciaController.crearTransferencia);
 
-// Actualizar (Solo observaciones)
-router.put("/:id", authorizePermission(PERMISSIONS.MANAGE_OPERACIONES_TANQUES), transferenciaController.actualizarTransferencia);
+// Editar una transferencia existente
+router.put("/:id", authorizePermission(PERMISSIONS.CREATE_TRANSFERENCIA), transferenciaController.actualizarTransferencia);
 
 // Revertir Transferencia (Regla de Oro: solo si es el último movimiento de AMBOS tanques)
 router.put("/:id/revertir", authorizePermission(PERMISSIONS.REVERTIR_OPERACION), transferenciaController.revertirTransferencia);
