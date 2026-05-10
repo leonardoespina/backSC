@@ -18,14 +18,13 @@ const { sequelize } = require("../../config/database");
 /**
  * Obtiene la situación del combustible agrupada por Llenadero y TipoCombustible.
  *
- * @param {{ fecha_desde?: string, fecha_hasta?: string }} opts
- *   fechas opcionales en formato YYYY-MM-DD.
- *   Si se omiten, se usa el día de hoy (Venezuela UTC-4).
+ * @param {{ start: string, end: string, fecha_desde: string, fecha_hasta: string }} opts
+ *   start/end: Timestamps del Día Operativo (07:00 AM)
+ *   fecha_desde/hasta: Fechas originales para el encabezado del reporte.
  */
-async function getSituacionCombustible({ fecha_desde, fecha_hasta } = {}) {
-    const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Caracas" });
-    const desde = fecha_desde || hoy;
-    const hasta  = fecha_hasta  || hoy;
+async function getSituacionCombustible({ start, end, fecha_desde, fecha_hasta } = {}) {
+    const desde = fecha_desde;
+    const hasta = fecha_hasta;
 
     // ─── 1. Stock actual y capacidad por Llenadero + TipoCombustible ───────────
     const stockRows = await Tanque.findAll({
@@ -57,7 +56,7 @@ async function getSituacionCombustible({ fecha_desde, fecha_hasta } = {}) {
     });
 
     // ─── 2. Consumo por TanqueID en el período ──────────────────────────────────
-    //    Usamos subquery para llevar el id_llenadero desde Tanque
+    //    Usamos fecha_movimiento para capturar el Día Operativo (07:00 - 07:00)
     const consumoRows = await sequelize.query(
         `
         SELECT
@@ -66,15 +65,14 @@ async function getSituacionCombustible({ fecha_desde, fecha_hasta } = {}) {
             COALESCE(SUM(ABS(mi.variacion)), 0) AS consumido_periodo
         FROM movimientos_inventario mi
         INNER JOIN tanques t ON t.id_tanque = mi.id_tanque
-        INNER JOIN cierres_turno ct ON mi.id_cierre_turno = ct.id_cierre
         WHERE
             mi.tipo_movimiento = 'DESPACHO'
-            AND ct.fecha_lote BETWEEN :desde AND :hasta
+            AND mi.fecha_movimiento >= :start AND mi.fecha_movimiento < :end
             AND t.estado = 'ACTIVO'
         GROUP BY t.id_llenadero, t.id_tipo_combustible
         `,
         {
-            replacements: { desde, hasta },
+            replacements: { start, end },
             type: sequelize.QueryTypes.SELECT,
         }
     );

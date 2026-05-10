@@ -11,6 +11,7 @@ const {
 const { getSituacionCombustible } = require("../../services/administracion/reporteSituacionService");
 const { Usuario } = require("../../models");
 const { hasPermission, PERMISSIONS } = require("../../utils/permissions");
+const { getOperativeRange } = require("../../utils/dateUtils");
 
 // ─────────────────────────────────────────────
 // GET /api/reportes/diario
@@ -180,7 +181,14 @@ exports.obtenerReporteCuposUsuario = async (req, res) => {
 exports.obtenerSituacionCombustible = async (req, res) => {
   try {
     const { fecha_desde, fecha_hasta } = req.query;
-    const data = await getSituacionCombustible({ fecha_desde, fecha_hasta });
+
+    // Normalizar fechas para el Día Operativo (07:00 AM)
+    const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Caracas" });
+    const desde = fecha_desde || hoy;
+    const hasta = fecha_hasta || hoy;
+    const { start, end } = getOperativeRange(desde, hasta);
+
+    const data = await getSituacionCombustible({ start, end, fecha_desde: desde, fecha_hasta: hasta });
     res.json(data);
   } catch (error) {
     console.error("Error en situación de combustible:", error);
