@@ -33,11 +33,15 @@ const { hasPermission, PERMISSIONS } = require("../../utils/permissions");
 const isValidFilter = (val) =>
     val !== undefined && val !== null && val !== "" && val !== "null" && val !== "undefined";
 
-/** Construye el rango de fechas ajustado a Venezuela (UTC-4). */
-function buildDateRange(fecha_desde, fecha_hasta) {
+/** Construye el rango de fechas con horas ajustado a Venezuela (UTC-4). */
+function buildDateRange(fecha_desde, fecha_hasta, hora_desde = "00:00:00", hora_hasta = "23:59:59") {
+    // Asegurar que si envían HH:mm se añadan los segundos
+    const hDesde = hora_desde.length === 5 ? `${hora_desde}:00` : hora_desde;
+    const hHasta = hora_hasta.length === 5 ? `${hora_hasta}:59` : hora_hasta;
+
     return {
-        start: new Date(`${fecha_desde}T00:00:00-04:00`),
-        end: new Date(`${fecha_hasta}T23:59:59.999-04:00`),
+        start: new Date(`${fecha_desde}T${hDesde}-04:00`),
+        end: new Date(`${fecha_hasta}T${hHasta}.999-04:00`),
     };
 }
 
@@ -70,18 +74,14 @@ function formatHora(fecha) {
  * Genera el reporte diario de un llenadero agrupado en INSTITUCIONAL y VENTA.
  * @param {{ id_llenadero: string, fecha_desde: string, fecha_hasta: string, query: object }} opts
  */
-async function getReporteDiario({ id_llenadero, fecha_desde, fecha_hasta, tipo_reporte, query, user }) {
-    const { start, end } = buildDateRange(fecha_desde, fecha_hasta);
+async function getReporteDiario({ id_llenadero, fecha_desde, fecha_hasta, hora_desde, hora_hasta, tipo_reporte, query, user }) {
+    const { start, end } = buildDateRange(fecha_desde, fecha_hasta, hora_desde, hora_hasta);
 
     const canViewFinancialData = hasPermission(user, PERMISSIONS.VIEW_REPORTE_VENTAS);
 
     const whereBase = {
         id_llenadero,
-
-        [Op.or]: [
-            { fecha_despacho: { [Op.between]: [start, end] } },
-            { [Op.and]: [{ fecha_despacho: null }, { fecha_solicitud: { [Op.between]: [start, end] } }] },
-        ],
+        fecha_validacion: { [Op.between]: [start, end] },
         estado: "FINALIZADA",
     };
 
@@ -254,15 +254,7 @@ function buildDespachoWhere({ fecha_desde, fecha_hasta, id_dependencia, subdepen
 
     const where = {
         estado: "FINALIZADA",
-        [Op.or]: [
-            { fecha_despacho: { [Op.between]: [start, end] } },
-            {
-                [Op.and]: [
-                    { fecha_despacho: null },
-                    { fecha_solicitud: { [Op.between]: [start, end] } },
-                ],
-            },
-        ],
+        fecha_validacion: { [Op.between]: [start, end] },
     };
 
     if (isValidFilter(id_dependencia)) {

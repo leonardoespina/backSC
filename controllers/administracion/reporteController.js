@@ -18,7 +18,7 @@ const { getOperativeRange } = require("../../utils/dateUtils");
 // ─────────────────────────────────────────────
 exports.generarReporteDiario = async (req, res) => {
   try {
-    let { id_llenadero, fecha_desde, fecha_hasta, tipo_reporte } = req.query;
+    let { id_llenadero, fecha_desde, fecha_hasta, hora_desde, hora_hasta, tipo_reporte } = req.query;
 
     if (!id_llenadero || !fecha_desde || !fecha_hasta) {
       return res.status(400).json({ msg: "Faltan parámetros obligatorios (id_llenadero, fecha_desde, fecha_hasta)." });
@@ -46,6 +46,8 @@ exports.generarReporteDiario = async (req, res) => {
       id_llenadero, 
       fecha_desde, 
       fecha_hasta, 
+      hora_desde,
+      hora_hasta,
       tipo_reporte, 
       query: req.query,
       user: req.usuario 
