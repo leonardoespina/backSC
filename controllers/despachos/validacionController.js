@@ -71,3 +71,46 @@ exports.finalizarTicket = async (req, res) => {
     res.status(500).json({ msg: "Error al finalizar ticket: " + error.message });
   }
 };
+
+/**
+ * Finalizar Ticket Vencido (Extemporáneo por Admin ROOT)
+ */
+exports.finalizarTicketVencido = async (req, res) => {
+  try {
+    const clientIp = req.clientIp || req.ip;
+    const result = await validacionService.finalizarTicketVencido(
+      req.body,
+      req.usuario,
+      clientIp,
+    );
+
+    // Notificar
+    if (req.io) {
+      req.io.emit("solicitud:actualizada", result.ticket);
+      if (result.updatedCupoId) {
+        req.io.emit("cupo:actualizado", {
+          id_cupo_actual: result.updatedCupoId,
+        });
+      }
+    }
+
+    res.json({
+      msg: result.msg,
+      ticket: result.ticket,
+    });
+  } catch (error) {
+    console.error("Error finalizando ticket vencido:", error);
+    if (error.message.includes("no encontrado")) {
+      return res.status(404).json({ msg: error.message });
+    }
+    if (
+      error.message.includes("requerido") ||
+      error.message.includes("debe estar VENCIDA") ||
+      error.message.includes("mayor a la aprobada") ||
+      error.message.includes("root")
+    ) {
+      return res.status(400).json({ msg: error.message });
+    }
+    res.status(500).json({ msg: "Error al finalizar ticket extemporáneo: " + error.message });
+  }
+};

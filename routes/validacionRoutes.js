@@ -12,4 +12,7 @@ router.get("/ticket/:codigo", validacionController.consultarTicket);
 // Finalizar ticket y cerrar proceso
 router.post("/finalizar", validacionController.finalizarTicket);
 
+// Finalizar ticket vencido extemporáneamente (Solo ROOT)
+router.post("/finalizar-extemporaneo", validacionController.finalizarTicketVencido);
+
 module.exports = router;
