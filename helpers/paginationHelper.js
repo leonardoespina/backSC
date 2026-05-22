@@ -14,17 +14,20 @@ const { Op } = require('sequelize');
 async function paginate(model, reqQuery, options = {}) {
     // 1. Extraer y validar parámetros de paginación y búsqueda
     const page = parseInt(reqQuery.page, 10) || 1;
-    const limit = parseInt(reqQuery.limit, 10) || 10;
+    const rawLimit = reqQuery.limit !== undefined ? parseInt(reqQuery.limit, 10) : 10;
+    const limit = isNaN(rawLimit) ? 10 : rawLimit;
     const search = reqQuery.search || '';
-    const offset = (page - 1) * limit;
 
     // 2. Construir la consulta base de Sequelize
     const queryOptions = {
         where: options.where || {}, // Aplicar filtros base si existen
-        limit,
-        offset,
         ...options // Permite pasar otras opciones como 'include', 'order', etc.
     };
+
+    if (limit > 0) {
+        queryOptions.limit = limit;
+        queryOptions.offset = (page - 1) * limit;
+    }
 
     // 3. Añadir lógica de búsqueda si se proporciona un término y campos de búsqueda
     if (search && options.searchableFields && options.searchableFields.length > 0) {
@@ -53,8 +56,8 @@ async function paginate(model, reqQuery, options = {}) {
         data: rows,
         pagination: {
             totalItems: count,
-            totalPages: Math.ceil(count / limit),
-            currentPage: page,
+            totalPages: limit > 0 ? Math.ceil(count / limit) : 1,
+            currentPage: limit > 0 ? page : 1,
             limit: limit
         }
     };
