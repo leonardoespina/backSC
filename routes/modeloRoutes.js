@@ -20,7 +20,7 @@ router.get("/", modeloController.obtenerModelos);
 router.post(
   "/",
   [
-    authorizePermission(PERMISSIONS.MANAGE_SYSTEM),
+    authorizePermission([PERMISSIONS.MANAGE_SYSTEM, PERMISSIONS.MANAGE_VEHICULOS]),
     check("nombre", "El nombre es obligatorio").not().isEmpty(),
     check(
       "id_marca",
@@ -35,7 +35,7 @@ router.post(
 router.put(
   "/:id",
   [
-    authorizePermission(PERMISSIONS.MANAGE_SYSTEM),
+    authorizePermission([PERMISSIONS.MANAGE_SYSTEM, PERMISSIONS.MANAGE_VEHICULOS]),
     check("nombre", "El nombre no puede estar vacío")
       .optional()
       .not()
@@ -49,7 +49,7 @@ router.put(
 // DELETE /api/modelos/:id (Desactivar) - Solo ADMIN
 router.delete(
   "/:id",
-  [authorizePermission(PERMISSIONS.MANAGE_SYSTEM), validarCampos],
+  [authorizePermission([PERMISSIONS.MANAGE_SYSTEM, PERMISSIONS.MANAGE_VEHICULOS]), validarCampos],
   modeloController.desactivarModelo,
 );
 
