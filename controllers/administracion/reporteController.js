@@ -129,13 +129,20 @@ exports.consultarMisDespachos = async (req, res) => {
 // ─────────────────────────────────────────────
 exports.obtenerConsumoPorDependencia = async (req, res) => {
   try {
-    const { fecha_desde, fecha_hasta } = req.query;
+    const { fecha_desde, fecha_hasta, id_dependencia, id_subdependencia, id_tipo_combustible, id_categoria } = req.query;
 
     if (!fecha_desde || !fecha_hasta) {
       return res.status(400).json({ msg: "Rango de fechas requerido (fecha_desde, fecha_hasta)." });
     }
 
-    const data = await getConsumoPorDependencia({ fecha_desde, fecha_hasta });
+    const data = await getConsumoPorDependencia({ 
+      fecha_desde, 
+      fecha_hasta,
+      id_dependencia,
+      id_subdependencia,
+      id_tipo_combustible,
+      id_categoria 
+    });
     res.json(data);
   } catch (error) {
     console.error("Error en reporte de consumo por dependencia:", error);

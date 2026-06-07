@@ -331,37 +331,54 @@ async function fetchDespachos(where, query) {
 /**
  * Retorna el consumo agregado por Dependencia y Tipo de Combustible.
  */
-async function getConsumoPorDependencia({ fecha_desde, fecha_hasta }) {
+async function getConsumoPorDependencia({ fecha_desde, fecha_hasta, id_dependencia, id_subdependencia, id_tipo_combustible, id_categoria }) {
     const { start, end } = buildDateRange(fecha_desde, fecha_hasta);
 
+    const where = {
+        estado: "FINALIZADA",
+        fecha_validacion: { [Op.between]: [start, end] },
+    };
+
+    if (isValidFilter(id_categoria)) where.id_categoria = id_categoria;
+    if (isValidFilter(id_dependencia)) where.id_dependencia = id_dependencia;
+    if (isValidFilter(id_subdependencia)) where.id_subdependencia = id_subdependencia;
+    if (isValidFilter(id_tipo_combustible)) where.id_tipo_combustible = id_tipo_combustible;
+
     const consumos = await Solicitud.findAll({
-        where: {
-            estado: "FINALIZADA",
-            fecha_validacion: { [Op.between]: [start, end] },
-        },
+        where,
         attributes: [
             "id_dependencia",
+            "id_subdependencia",
             "id_tipo_combustible",
             [sequelize.fn("SUM", sequelize.col("cantidad_despachada")), "total_litros"],
         ],
         include: [
             { model: Dependencia, as: "Dependencia", attributes: ["nombre_dependencia"] },
+            { model: Subdependencia, as: "Subdependencia", attributes: ["nombre"] },
             { model: TipoCombustible, attributes: ["nombre"] },
         ],
         group: [
             "Solicitud.id_dependencia",
+            "Solicitud.id_subdependencia",
             "Solicitud.id_tipo_combustible",
             "Dependencia.id_dependencia",
             "Dependencia.nombre_dependencia",
+            "Subdependencia.id_subdependencia",
+            "Subdependencia.nombre",
             "TipoCombustible.id_tipo_combustible",
             "TipoCombustible.nombre",
         ],
-        order: [[sequelize.col("Dependencia.nombre_dependencia"), "ASC"]],
+        order: [
+            [sequelize.col("Dependencia.nombre_dependencia"), "ASC"],
+            [sequelize.col("Subdependencia.nombre"), "ASC"]
+        ],
     });
 
     return consumos.map((c) => ({
         id_dependencia: c.id_dependencia,
         dependencia: c.Dependencia?.nombre_dependencia || "Desconocida",
+        id_subdependencia: c.id_subdependencia,
+        subdependencia: c.Subdependencia?.nombre || "General",
         id_tipo_combustible: c.id_tipo_combustible,
         tipo_combustible: c.TipoCombustible?.nombre || "N/A",
         total_litros: parseFloat(parseFloat(c.get("total_litros") || 0).toFixed(2)),
