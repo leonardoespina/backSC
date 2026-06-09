@@ -19,6 +19,8 @@ const {
     Tanque,
     Llenadero,
     CargaCisternaTanque,
+    MedicionTanque,
+    CierreTurno
 } = require("../../models");
 const { Op } = require("sequelize");
 const sequelize = require("sequelize");
@@ -542,6 +544,213 @@ async function getReporteRecepcionCisterna({ fecha_desde, fecha_hasta, id_llenad
     }));
 }
 
+// ─────────────────────────────────────────────
+// GET /api/reportes/desviaciones
+// ─────────────────────────────────────────────
+async function getReporteDesviaciones({ fecha_desde, fecha_hasta, id_llenadero, id_tipo_combustible, tipo_desviacion, origen }) {
+    const { start, end } = buildDateRange(fecha_desde, fecha_hasta);
+    const dateOnlyStart = fecha_desde;
+    const dateOnlyEnd = fecha_hasta;
+
+    const filterLlenadero = isValidFilter(id_llenadero) ? { id_llenadero } : {};
+    const filterCombustible = isValidFilter(id_tipo_combustible) ? { id_tipo_combustible } : {};
+
+    // 1. Mediciones Ordinarias
+    const medicionesOrdinarias = await MedicionTanque.findAll({
+        where: {
+            fecha_medicion: { [Op.between]: [dateOnlyStart, dateOnlyEnd] },
+            tipo_medicion: "ORDINARIA",
+            diferencia: { [Op.ne]: 0 },
+            estado: { [Op.ne]: "ANULADO" }
+        },
+        include: [{
+            model: Tanque,
+            as: "Tanque",
+            where: { ...filterLlenadero, ...filterCombustible },
+            include: [
+                { model: Llenadero, as: "Llenadero" },
+                { model: TipoCombustible, as: "TipoCombustible" }
+            ]
+        }]
+    });
+
+    // 2. Mediciones de Cierre de Turno
+    const medicionesCierre = await MedicionTanque.findAll({
+        where: {
+            fecha_medicion: { [Op.between]: [dateOnlyStart, dateOnlyEnd] },
+            id_cierre_turno: { [Op.not]: null },
+            tipo_medicion: "CIERRE",
+            diferencia: { [Op.ne]: 0 },
+            estado: { [Op.ne]: "ANULADO" }
+        },
+        include: [{
+            model: Tanque,
+            as: "Tanque",
+            where: { ...filterLlenadero, ...filterCombustible },
+            include: [
+                { model: Llenadero, as: "Llenadero" },
+                { model: TipoCombustible, as: "TipoCombustible" }
+            ]
+        }, {
+            model: CierreTurno,
+            as: "CierreTurno"
+        }]
+    });
+
+    // 3. Cargas de Cisterna
+    const cargasCisterna = await CargaCisterna.findAll({
+        where: {
+            fecha_llegada: { [Op.between]: [start, end] },
+            estado: { [Op.notIn]: ["ANULADO", "ANULADA"] },
+            diferencia_guia: { [Op.ne]: 0 },
+            ...filterCombustible
+        },
+        include: [
+            {
+                model: Tanque, as: "Tanque", required: false,
+                include: [{ model: Llenadero, as: "Llenadero" }]
+            },
+            {
+                model: CargaCisternaTanque, as: "tanques_descarga", required: false,
+                include: [{ model: Tanque, as: "Tanque", include: [{ model: Llenadero, as: "Llenadero" }] }]
+            },
+            { model: TipoCombustible, as: "TipoCombustible" }
+        ]
+    });
+
+    // Unificar resultados
+    let resultados = [];
+
+    // Mapeo Mediciones Ordinarias
+    for (const m of medicionesOrdinarias) {
+        const difTotal = parseFloat(m.diferencia) || 0;
+        const evap = parseFloat(m.merma_evaporacion) || 0;
+        const difNeta = difTotal - evap;
+
+        // Fila 1: Evaporación (si existe y es mayor a 0)
+        if (evap > 0) {
+            resultados.push({
+                id: `MO-${m.id_medicion}-E`,
+                fecha: m.fecha_medicion,
+                llenadero: m.Tanque.Llenadero.nombre_llenadero,
+                id_llenadero: m.Tanque.id_llenadero,
+                tipo_combustible: m.Tanque.TipoCombustible.nombre,
+                origen: "Medición Ordinaria",
+                referencia: `Tanque ${m.Tanque.codigo}`,
+                cantidad: evap,
+                tipo_desviacion: "Evaporación"
+            });
+        }
+
+        // Fila 2: Diferencia (Faltante o Sobrante neto restante)
+        if (difNeta !== 0 || (evap === 0 && difTotal === 0)) {
+            if (difNeta !== 0) {
+                resultados.push({
+                    id: `MO-${m.id_medicion}-D`,
+                    fecha: m.fecha_medicion,
+                    llenadero: m.Tanque.Llenadero.nombre_llenadero,
+                    id_llenadero: m.Tanque.id_llenadero,
+                    tipo_combustible: m.Tanque.TipoCombustible.nombre,
+                    origen: "Medición Ordinaria",
+                    referencia: `Tanque ${m.Tanque.codigo}`,
+                    cantidad: difNeta,
+                    tipo_desviacion: difNeta > 0 ? "Faltante" : "Sobrante"
+                });
+            }
+        }
+    }
+
+    // Mapeo Mediciones de Cierre
+    for (const m of medicionesCierre) {
+        const turnoInfo = m.CierreTurno ? `Turno ${m.CierreTurno.turno}` : "Cierre";
+        
+        const difTotal = parseFloat(m.diferencia) || 0;
+        const evap = parseFloat(m.merma_evaporacion) || 0;
+        const difNeta = difTotal - evap;
+
+        // Fila 1: Evaporación (si existe y es mayor a 0)
+        if (evap > 0) {
+            resultados.push({
+                id: `MC-${m.id_medicion}-E`,
+                fecha: m.fecha_medicion,
+                llenadero: m.Tanque.Llenadero.nombre_llenadero,
+                id_llenadero: m.Tanque.id_llenadero,
+                tipo_combustible: m.Tanque.TipoCombustible.nombre,
+                origen: "Cierre de Turno",
+                referencia: `${turnoInfo} / Tanque ${m.Tanque.codigo}`,
+                cantidad: evap,
+                tipo_desviacion: "Evaporación"
+            });
+        }
+
+        // Fila 2: Diferencia (Faltante o Sobrante neto restante)
+        if (difNeta !== 0) {
+            resultados.push({
+                id: `MC-${m.id_medicion}-D`,
+                fecha: m.fecha_medicion,
+                llenadero: m.Tanque.Llenadero.nombre_llenadero,
+                id_llenadero: m.Tanque.id_llenadero,
+                tipo_combustible: m.Tanque.TipoCombustible.nombre,
+                origen: "Cierre de Turno",
+                referencia: `${turnoInfo} / Tanque ${m.Tanque.codigo}`,
+                cantidad: difNeta, 
+                tipo_desviacion: difNeta > 0 ? "Faltante" : "Sobrante"
+            });
+        }
+    }
+
+    // Mapeo Cargas de Cisterna
+    for (const c of cargasCisterna) {
+        // Determinar Llenadero a partir del Tanque principal o los tanques de descarga
+        let llenaderoObj = null;
+        if (c.Tanque && c.Tanque.Llenadero) {
+            llenaderoObj = c.Tanque.Llenadero;
+        } else if (c.tanques_descarga && c.tanques_descarga.length > 0 && c.tanques_descarga[0].Tanque) {
+            llenaderoObj = c.tanques_descarga[0].Tanque.Llenadero;
+        }
+
+        const id_llenadero_carga = llenaderoObj ? llenaderoObj.id_llenadero : null;
+        
+        // Filtro en memoria para Llenadero en Cargas Cisterna
+        if (isValidFilter(id_llenadero) && id_llenadero_carga != id_llenadero) {
+            continue;
+        }
+
+        resultados.push({
+            id: `CC-${c.id_carga}`,
+            fecha: c.fecha_llegada.toISOString().split("T")[0], // Convertir a YYYY-MM-DD
+            llenadero: llenaderoObj ? llenaderoObj.nombre_llenadero : "Desconocido",
+            id_llenadero: id_llenadero_carga,
+            tipo_combustible: c.TipoCombustible.nombre,
+            origen: "Recepción Cisterna",
+            referencia: `Guía #${c.numero_guia} / Placa ${c.placa_cisterna}`,
+            cantidad: parseFloat(c.diferencia_guia), // Segun Guia - Recibido (Positivo = Faltante, Negativo = Sobrante)
+            tipo_desviacion: parseFloat(c.diferencia_guia) > 0 ? "Faltante" : "Sobrante"
+        });
+    }
+
+    // Filtro en memoria por Tipo de Desviación
+    if (isValidFilter(tipo_desviacion) && tipo_desviacion !== "Ambos") {
+        if (tipo_desviacion === "Faltantes") {
+            resultados = resultados.filter(r => r.tipo_desviacion === "Faltante");
+        } else if (tipo_desviacion === "Sobrantes") {
+            resultados = resultados.filter(r => r.tipo_desviacion === "Sobrante");
+        } else if (tipo_desviacion === "Evaporación") {
+            resultados = resultados.filter(r => r.tipo_desviacion === "Evaporación");
+        }
+    }
+
+    // Filtro en memoria por Origen
+    if (isValidFilter(origen) && origen !== "Todos") {
+        resultados = resultados.filter(r => r.origen === origen);
+    }
+
+    // Ordenar por fecha descendente
+    resultados.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+    return resultados;
+}
+
 module.exports = {
     getReporteDiario,
     buildDespachoWhere,
@@ -549,4 +758,5 @@ module.exports = {
     getConsumoPorDependencia,
     getCuposUsuario,
     getReporteRecepcionCisterna,
+    getReporteDesviaciones,
 };

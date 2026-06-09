@@ -60,4 +60,12 @@ router.get(
   reporteController.obtenerReporteRecepcionCisterna,
 );
 
+// Ruta para el reporte de desviaciones (faltantes y sobrantes)
+router.get(
+  "/desviaciones",
+  autenticarUsuario,
+  authorizePermission(PERMISSIONS.VIEW_REPORTES_GLOB),
+  reporteController.obtenerReporteDesviaciones,
+);
+
 module.exports = router;

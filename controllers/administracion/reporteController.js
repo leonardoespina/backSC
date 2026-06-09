@@ -7,6 +7,7 @@ const {
   getConsumoPorDependencia,
   getCuposUsuario,
   getReporteRecepcionCisterna,
+  getReporteDesviaciones,
 } = require("../../services/administracion/reporteService");
 const { getSituacionCombustible } = require("../../services/administracion/reporteSituacionService");
 const { Usuario } = require("../../models");
@@ -226,5 +227,32 @@ exports.obtenerReporteRecepcionCisterna = async (req, res) => {
   } catch (error) {
     console.error("Error en reporte de recepción de cisternas:", error);
     res.status(500).json({ msg: "Error al generar el reporte de recepción.", error: error.message });
+  }
+};
+
+// ─────────────────────────────────────────────
+// GET /api/reportes/desviaciones
+// ─────────────────────────────────────────────
+exports.obtenerReporteDesviaciones = async (req, res) => {
+  try {
+    const { fecha_desde, fecha_hasta, id_llenadero, id_tipo_combustible, tipo_desviacion, origen } = req.query;
+
+    if (!fecha_desde || !fecha_hasta) {
+      return res.status(400).json({ msg: "Las fechas (fecha_desde y fecha_hasta) son obligatorias." });
+    }
+
+    const reportData = await getReporteDesviaciones({
+      fecha_desde,
+      fecha_hasta,
+      id_llenadero,
+      id_tipo_combustible,
+      tipo_desviacion,
+      origen
+    });
+
+    res.json(reportData);
+  } catch (error) {
+    console.error("Error al obtener reporte de desviaciones:", error);
+    res.status(500).json({ msg: "Error al generar el reporte", error: error.message });
   }
 };
