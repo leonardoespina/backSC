@@ -724,6 +724,8 @@ async function getReporteDesviaciones({ fecha_desde, fecha_hasta, id_llenadero, 
             tipo_combustible: c.TipoCombustible.nombre,
             origen: "Recepción Cisterna",
             referencia: `Guía #${c.numero_guia} / Placa ${c.placa_cisterna}`,
+            litros_segun_guia: parseFloat(c.litros_segun_guia || 0),
+            litros_recibidos: parseFloat(c.litros_recibidos || 0),
             cantidad: parseFloat(c.diferencia_guia), // Segun Guia - Recibido (Positivo = Faltante, Negativo = Sobrante)
             tipo_desviacion: parseFloat(c.diferencia_guia) > 0 ? "Faltante" : "Sobrante"
         });
