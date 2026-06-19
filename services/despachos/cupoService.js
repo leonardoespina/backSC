@@ -155,7 +155,7 @@ exports.actualizarCupoBase = async (id, data, clientIp) => {
             cantidad_disponible: nuevaDisponible,
             estado: nuevaDisponible <= 0 ? "AGOTADO" : "ACTIVO",
           },
-          { where: { id_cupo_base: id }, transaction: t },
+          { where: { id_cupo_base: id, periodo: periodoActual }, transaction: t },
         );
       }
     }

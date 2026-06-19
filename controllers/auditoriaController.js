@@ -1,5 +1,6 @@
 const { Auditoria } = require("../models");
 const { Op } = require("sequelize");
+const { humanizeAuditData } = require("../utils/auditHumanizer");
 
 /**
  * @typedef {import('express').Request} Request
@@ -108,10 +109,13 @@ const obtenerRegistros = async (req, res) => {
             ],
         });
 
+        // Aplicar el filtro humanizador a cada registro devuelto
+        const registrosHumanizados = rows.map(r => humanizeAuditData(r));
+
         return res.status(200).json({
             success: true,
             data: {
-                registros: rows,
+                registros: registrosHumanizados,
                 paginacion: {
                     total: count,
                     page: pageNum,
@@ -149,9 +153,12 @@ const obtenerDetalle = async (req, res) => {
             });
         }
 
+        // Aplicar el filtro humanizador al detalle
+        const registroHumanizado = humanizeAuditData(registro);
+
         return res.status(200).json({
             success: true,
-            data: registro,
+            data: registroHumanizado,
         });
     } catch (error) {
         console.error("Error al obtener detalle de auditoría:", error);
