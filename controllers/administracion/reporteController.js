@@ -10,6 +10,7 @@ const {
   getReporteDesviaciones,
 } = require("../../services/administracion/reporteService");
 const { getSituacionCombustible } = require("../../services/administracion/reporteSituacionService");
+const { generarKardexConsolidado } = require("../../services/administracion/reporteKardexService");
 const { Usuario } = require("../../models");
 const { hasPermission, PERMISSIONS } = require("../../utils/permissions");
 const { getOperativeRange } = require("../../utils/dateUtils");
@@ -254,5 +255,79 @@ exports.obtenerReporteDesviaciones = async (req, res) => {
   } catch (error) {
     console.error("Error al obtener reporte de desviaciones:", error);
     res.status(500).json({ msg: "Error al generar el reporte", error: error.message });
+  }
+};
+
+// ─────────────────────────────────────────────
+// GET /api/reportes/kardex-dinamico
+// ─────────────────────────────────────────────
+exports.obtenerKardexDinamico = async (req, res) => {
+  try {
+    const { fecha_desde, fecha_hasta, tipo_reporte, llenaderos_ids } = req.query;
+
+    const agruparPor = tipo_reporte === 'ANUAL' || tipo_reporte === 'MENSUAL' ? 'MONTH' : 'DAY';
+
+    let llenaderosIds = [];
+    if (llenaderos_ids) {
+      llenaderosIds = llenaderos_ids.split(',').map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+    }
+
+    const reportData = await generarKardexConsolidado({ 
+      fecha_desde, 
+      fecha_hasta, 
+      agruparPor,
+      llenaderosIds
+    });
+
+    return res.status(200).json({
+      success: true,
+      meta: {
+        total_registros: reportData.length,
+        agrupacion: agruparPor
+      },
+      data: reportData
+    });
+
+  } catch (error) {
+    console.error("[Kardex Error]:", error);
+    return res.status(error.message.includes('obligatorias') ? 400 : 500).json({
+      success: false,
+      message: error.message || "Error interno del servidor"
+    });
+  }
+};
+
+// ─────────────────────────────────────────────
+// GET /api/reportes/total-consolidado
+// ─────────────────────────────────────────────
+exports.obtenerTotalConsolidado = async (req, res) => {
+  try {
+    const { fecha_desde, fecha_hasta, tipo_reporte } = req.query;
+
+    const agruparPor = tipo_reporte === 'ANUAL' || tipo_reporte === 'MENSUAL' ? 'MONTH' : 'DAY';
+
+    const reportData = await generarKardexConsolidado({ 
+      fecha_desde, 
+      fecha_hasta, 
+      agruparPor,
+      agruparGlobalmente: true
+    });
+
+    return res.status(200).json({
+      success: true,
+      meta: {
+        total_registros: reportData.length,
+        agrupacion: agruparPor,
+        tipo: 'GLOBAL'
+      },
+      data: reportData
+    });
+
+  } catch (error) {
+    console.error("[Kardex Global Error]:", error);
+    return res.status(error.message.includes('obligatorias') ? 400 : 500).json({
+      success: false,
+      message: error.message || "Error interno del servidor"
+    });
   }
 };

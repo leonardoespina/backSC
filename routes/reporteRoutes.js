@@ -68,4 +68,20 @@ router.get(
   reporteController.obtenerReporteDesviaciones,
 );
 
+// Ruta para el motor matemático del Kardex Dinámico (Día a Día / Mensual / Anual)
+router.get(
+  "/kardex-dinamico",
+  autenticarUsuario,
+  authorizePermission(PERMISSIONS.VIEW_REPORTES_GLOB),
+  reporteController.obtenerKardexDinamico,
+);
+
+// Ruta para el Consolidado Total (Global)
+router.get(
+  "/total-consolidado",
+  autenticarUsuario,
+  authorizePermission(PERMISSIONS.VIEW_REPORTES_GLOB),
+  reporteController.obtenerTotalConsolidado,
+);
+
 module.exports = router;
