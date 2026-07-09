@@ -35,8 +35,14 @@ exports.listarSolicitudesParaDespacho = async (query) => {
   }
 
   if (id_llenadero) {
-    where.id_llenadero = parseInt(id_llenadero, 10);
-    console.log(`[DESPACHO] Filtrando por id_llenadero: ${where.id_llenadero} (tipo: ${typeof where.id_llenadero})`);
+    if (String(id_llenadero).includes(',')) {
+      const ids = String(id_llenadero).split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id));
+      where.id_llenadero = { [Op.in]: ids };
+      console.log(`[DESPACHO] Filtrando por multiples id_llenadero: ${ids}`);
+    } else {
+      where.id_llenadero = parseInt(id_llenadero, 10);
+      console.log(`[DESPACHO] Filtrando por id_llenadero: ${where.id_llenadero}`);
+    }
   }
 
   if (fecha_inicio && fecha_fin) {
