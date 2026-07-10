@@ -7,6 +7,17 @@ async function generarKardexConsolidado({ fecha_desde, fecha_hasta, agruparPor =
   if (!fecha_desde || !fecha_hasta) throw new Error("Las fechas son obligatorias.");
   
   const hoyStr = moment().format("YYYY-MM-DD");
+  
+  const formatosFecha = ["YYYY-MM-DD", "YYYY/MM/DD", "YYYY-MM", "YYYY/MM"];
+  
+  if (moment(fecha_hasta, formatosFecha).isAfter(hoyStr)) {
+    fecha_hasta = hoyStr;
+  }
+  
+  if (moment(fecha_desde, formatosFecha).isAfter(hoyStr)) {
+    return [];
+  }
+
   const formatoGrupo = agruparPor === 'MONTH' ? 'YYYY-MM' : 'YYYY-MM-DD';
 
   const entidades = await obtenerEntidadesActivas(agruparGlobalmente, llenaderosIds);
@@ -163,9 +174,10 @@ async function obtenerMovimientosRango(fechaInicio, fechaFin, llenaderosIds = []
 }
 
 function generarLineaTiempo(start, end, type) {
+  const formatosFecha = ["YYYY-MM-DD", "YYYY/MM/DD", "YYYY-MM", "YYYY/MM"];
   const arr = [];
-  let current = moment(start);
-  const final = moment(end);
+  let current = moment(start, formatosFecha);
+  const final = moment(end, formatosFecha);
   
   const formato = type === 'MONTH' ? 'YYYY-MM' : 'YYYY-MM-DD';
   const salto = type === 'MONTH' ? 'months' : 'days';
