@@ -263,7 +263,7 @@ exports.obtenerReporteDesviaciones = async (req, res) => {
 // ─────────────────────────────────────────────
 exports.obtenerKardexDinamico = async (req, res) => {
   try {
-    const { fecha_desde, fecha_hasta, tipo_reporte, llenaderos_ids } = req.query;
+    const { fecha_desde, fecha_hasta, tipo_reporte, llenaderos_ids, combustibles_ids } = req.query;
 
     const agruparPor = tipo_reporte === 'ANUAL' || tipo_reporte === 'MENSUAL' ? 'MONTH' : 'DAY';
 
@@ -271,12 +271,18 @@ exports.obtenerKardexDinamico = async (req, res) => {
     if (llenaderos_ids) {
       llenaderosIds = llenaderos_ids.split(',').map(id => parseInt(id, 10)).filter(id => !isNaN(id));
     }
+    
+    let combustiblesIds = [];
+    if (combustibles_ids) {
+      combustiblesIds = combustibles_ids.split(',').map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+    }
 
     const reportData = await generarKardexConsolidado({ 
       fecha_desde, 
       fecha_hasta, 
       agruparPor,
-      llenaderosIds
+      llenaderosIds,
+      combustiblesIds
     });
 
     return res.status(200).json({
@@ -302,15 +308,21 @@ exports.obtenerKardexDinamico = async (req, res) => {
 // ─────────────────────────────────────────────
 exports.obtenerTotalConsolidado = async (req, res) => {
   try {
-    const { fecha_desde, fecha_hasta, tipo_reporte } = req.query;
+    const { fecha_desde, fecha_hasta, tipo_reporte, combustibles_ids } = req.query;
 
     const agruparPor = tipo_reporte === 'ANUAL' || tipo_reporte === 'MENSUAL' ? 'MONTH' : 'DAY';
+
+    let combustiblesIds = [];
+    if (combustibles_ids) {
+      combustiblesIds = combustibles_ids.split(',').map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+    }
 
     const reportData = await generarKardexConsolidado({ 
       fecha_desde, 
       fecha_hasta, 
-      agruparPor,
-      agruparGlobalmente: true
+      agruparPor, 
+      agruparGlobalmente: true,
+      combustiblesIds
     });
 
     return res.status(200).json({

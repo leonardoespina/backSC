@@ -3,7 +3,7 @@
 const { sequelize } = require("../../config/database");
 const moment = require("moment"); // Asegúrate de tener moment instalado
 
-async function generarKardexConsolidado({ fecha_desde, fecha_hasta, agruparPor = 'DAY', agruparGlobalmente = false, llenaderosIds = [] }) {
+async function generarKardexConsolidado({ fecha_desde, fecha_hasta, agruparPor = 'DAY', agruparGlobalmente = false, llenaderosIds = [], combustiblesIds = [] }) {
   if (!fecha_desde || !fecha_hasta) throw new Error("Las fechas son obligatorias.");
   
   const hoyStr = moment().format("YYYY-MM-DD");
@@ -20,11 +20,11 @@ async function generarKardexConsolidado({ fecha_desde, fecha_hasta, agruparPor =
 
   const formatoGrupo = agruparPor === 'MONTH' ? 'YYYY-MM' : 'YYYY-MM-DD';
 
-  const entidades = await obtenerEntidadesActivas(agruparGlobalmente, llenaderosIds);
+  const entidades = await obtenerEntidadesActivas(agruparGlobalmente, llenaderosIds, combustiblesIds);
   if (!entidades.length) return [];
 
-  const stockBase = await obtenerStockInicialGlobal(`${fecha_desde} 00:00:00`, agruparGlobalmente, llenaderosIds);
-  const movimientosRaw = await obtenerMovimientosRango(`${fecha_desde} 00:00:00`, `${fecha_hasta} 23:59:59`, llenaderosIds);
+  const stockBase = await obtenerStockInicialGlobal(`${fecha_desde} 00:00:00`, agruparGlobalmente, llenaderosIds, combustiblesIds);
+  const movimientosRaw = await obtenerMovimientosRango(`${fecha_desde} 00:00:00`, `${fecha_hasta} 23:59:59`, llenaderosIds, combustiblesIds);
   
   const lineaTiempo = generarLineaTiempo(fecha_desde, fecha_hasta, agruparPor);
   const resultadoFinal = [];
@@ -48,13 +48,16 @@ async function generarKardexConsolidado({ fecha_desde, fecha_hasta, agruparPor =
         switch (mov.tipo_movimiento) {
           case 'RECEPCION_CISTERNA': acc.recepcion += val; break;
           case 'TRANSFERENCIA_ENTRADA': acc.tr_entrada += val; break;
-          case 'DESPACHO': acc.despacho += Math.abs(val); break;
+          case 'DESPACHO': 
+            acc.despacho += Math.abs(val); 
+            acc.intercambio += parseFloat(mov.intercambio || 0);
+            break;
           case 'TRANSFERENCIA_SALIDA': acc.tr_salida += Math.abs(val); break;
           case 'AJUSTE_MEDICION':
           case 'ANULACION': acc.ajustes += val; break;
         }
         return acc;
-      }, { recepcion: 0, tr_entrada: 0, despacho: 0, tr_salida: 0, ajustes: 0 });
+      }, { recepcion: 0, tr_entrada: 0, despacho: 0, tr_salida: 0, ajustes: 0, intercambio: 0 });
 
       const saldoFinal = saldoFlotante 
         + consolidado.recepcion + consolidado.tr_entrada 
@@ -72,6 +75,7 @@ async function generarKardexConsolidado({ fecha_desde, fecha_hasta, agruparPor =
         nombre_combustible: entidad.nombre_combustible,
         stock_inicial: saldoFlotante.toFixed(2),
         ...consolidado,
+        intercambio: consolidado.intercambio.toFixed(2),
         stock_final: saldoFinal.toFixed(2)
       });
 
@@ -86,13 +90,19 @@ async function generarKardexConsolidado({ fecha_desde, fecha_hasta, agruparPor =
  * FUNCIONES AUXILIARES PRIVADAS
  * ===================================================================== */
 
-async function obtenerEntidadesActivas(agruparGlobalmente, llenaderosIds = []) {
+async function obtenerEntidadesActivas(agruparGlobalmente, llenaderosIds = [], combustiblesIds = []) {
   if (agruparGlobalmente) {
-    return await sequelize.query(`
+    let sql = `
       SELECT 'GLOBAL' AS id_llenadero, 'TODAS LAS SEDES (GLOBAL)' AS nombre_llenadero, tc.id_tipo_combustible, tc.nombre AS nombre_combustible
       FROM tipo_combustible tc
       WHERE tc.activo = true
-    `, { type: sequelize.QueryTypes.SELECT });
+    `;
+    let replacements = {};
+    if (combustiblesIds && combustiblesIds.length > 0) {
+      sql += ` AND tc.id_tipo_combustible IN (:combustiblesIds)`;
+      replacements.combustiblesIds = combustiblesIds;
+    }
+    return await sequelize.query(sql, { replacements, type: sequelize.QueryTypes.SELECT });
   } else {
     let sql = `
       SELECT t.id_llenadero, ll.nombre_llenadero, t.id_tipo_combustible, tc.nombre AS nombre_combustible
@@ -106,16 +116,20 @@ async function obtenerEntidadesActivas(agruparGlobalmente, llenaderosIds = []) {
       sql += ` AND t.id_llenadero IN (:llenaderosIds)`;
       replacements.llenaderosIds = llenaderosIds;
     }
+    if (combustiblesIds && combustiblesIds.length > 0) {
+      sql += ` AND t.id_tipo_combustible IN (:combustiblesIds)`;
+      replacements.combustiblesIds = combustiblesIds;
+    }
     sql += ` GROUP BY t.id_llenadero, ll.nombre_llenadero, t.id_tipo_combustible, tc.nombre`;
     
     return await sequelize.query(sql, { replacements, type: sequelize.QueryTypes.SELECT });
   }
 }
 
-async function obtenerStockInicialGlobal(fechaCorte, agruparGlobalmente, llenaderosIds = []) {
+async function obtenerStockInicialGlobal(fechaCorte, agruparGlobalmente, llenaderosIds = [], combustiblesIds = []) {
   let rows;
   if (agruparGlobalmente) {
-    rows = await sequelize.query(`
+    let sql = `
       SELECT 'GLOBAL' AS id_llenadero, t.id_tipo_combustible,
              SUM(COALESCE((
                  SELECT mi.volumen_despues 
@@ -125,8 +139,14 @@ async function obtenerStockInicialGlobal(fechaCorte, agruparGlobalmente, llenade
              ), 0)) AS stock_inicial
       FROM tanques t
       WHERE t.estado = 'ACTIVO'
-      GROUP BY t.id_tipo_combustible
-    `, { replacements: { fechaCorte }, type: sequelize.QueryTypes.SELECT });
+    `;
+    let replacements = { fechaCorte };
+    if (combustiblesIds && combustiblesIds.length > 0) {
+      sql += ` AND t.id_tipo_combustible IN (:combustiblesIds)`;
+      replacements.combustiblesIds = combustiblesIds;
+    }
+    sql += ` GROUP BY t.id_tipo_combustible`;
+    rows = await sequelize.query(sql, { replacements, type: sequelize.QueryTypes.SELECT });
   } else {
     let sql = `
       SELECT t.id_llenadero, t.id_tipo_combustible,
@@ -144,6 +164,10 @@ async function obtenerStockInicialGlobal(fechaCorte, agruparGlobalmente, llenade
       sql += ` AND t.id_llenadero IN (:llenaderosIds)`;
       replacements.llenaderosIds = llenaderosIds;
     }
+    if (combustiblesIds && combustiblesIds.length > 0) {
+      sql += ` AND t.id_tipo_combustible IN (:combustiblesIds)`;
+      replacements.combustiblesIds = combustiblesIds;
+    }
     sql += ` GROUP BY t.id_llenadero, t.id_tipo_combustible`;
     
     rows = await sequelize.query(sql, { replacements, type: sequelize.QueryTypes.SELECT });
@@ -157,9 +181,16 @@ async function obtenerStockInicialGlobal(fechaCorte, agruparGlobalmente, llenade
   return mapa;
 }
 
-async function obtenerMovimientosRango(fechaInicio, fechaFin, llenaderosIds = []) {
+async function obtenerMovimientosRango(fechaInicio, fechaFin, llenaderosIds = [], combustiblesIds = []) {
   let sql = `
-    SELECT mi.fecha_movimiento, t.id_llenadero, t.id_tipo_combustible, mi.tipo_movimiento, mi.variacion
+    SELECT mi.fecha_movimiento, t.id_llenadero, t.id_tipo_combustible, mi.tipo_movimiento, mi.variacion,
+           (CASE 
+              WHEN mi.tabla_referencia = 'solicitudes' AND mi.tipo_movimiento = 'DESPACHO' THEN 
+                (SELECT s.cantidad_despachada 
+                 FROM solicitudes s 
+                 WHERE s.id_solicitud = mi.id_referencia AND s.tipo_solicitud = 'VENTA')
+              ELSE 0 
+            END) as intercambio
     FROM movimientos_inventario mi
     JOIN tanques t ON mi.id_tanque = t.id_tanque
     WHERE mi.fecha_movimiento >= :fechaInicio AND mi.fecha_movimiento <= :fechaFin
@@ -169,6 +200,10 @@ async function obtenerMovimientosRango(fechaInicio, fechaFin, llenaderosIds = []
   if (llenaderosIds && llenaderosIds.length > 0) {
     sql += ` AND t.id_llenadero IN (:llenaderosIds)`;
     replacements.llenaderosIds = llenaderosIds;
+  }
+  if (combustiblesIds && combustiblesIds.length > 0) {
+    sql += ` AND t.id_tipo_combustible IN (:combustiblesIds)`;
+    replacements.combustiblesIds = combustiblesIds;
   }
   return await sequelize.query(sql, { replacements, type: sequelize.QueryTypes.SELECT });
 }
