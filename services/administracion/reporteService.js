@@ -342,7 +342,12 @@ async function getConsumoPorDependencia({ fecha_desde, fecha_hasta, id_dependenc
     };
 
     if (isValidFilter(id_categoria)) where.id_categoria = id_categoria;
-    if (isValidFilter(id_dependencia)) where.id_dependencia = id_dependencia;
+    if (isValidFilter(id_dependencia)) {
+        const ids = (Array.isArray(id_dependencia) ? id_dependencia : id_dependencia.toString().split(',')).filter(isValidFilter);
+        if (ids.length > 0) {
+            where.id_dependencia = ids.length === 1 ? ids[0] : { [Op.in]: ids };
+        }
+    }
     if (isValidFilter(id_subdependencia)) where.id_subdependencia = id_subdependencia;
     if (isValidFilter(id_tipo_combustible)) where.id_tipo_combustible = id_tipo_combustible;
 
