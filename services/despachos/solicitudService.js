@@ -33,6 +33,12 @@ const {
 exports.createSolicitud = async (data, user, clientIp) => {
   return await executeTransaction(clientIp, async (t) => {
     const { id_usuario } = user;
+
+    // BLOQUEO DE CONCURRENCIA (Pessimistic Lock)
+    // Fuerza a que si llegan dos peticiones en el mismo milisegundo del mismo usuario,
+    // la segunda tenga que esperar a que la primera termine, solucionando el "Race Condition".
+    await Usuario.findByPk(id_usuario, { transaction: t, lock: true });
+
     const {
       id_vehiculo,
       placa,
