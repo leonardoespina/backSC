@@ -107,17 +107,22 @@ exports.crearCargaCisterna = async (data, user, clientIp) => {
         litros_recibidos: tk.litros_recibidos
       }, { transaction: t });
 
-      const volumenAntes = parseFloat(tanqueActual.nivel_actual || 0);
+      const volumenAntesSistema = parseFloat(tanqueActual.nivel_actual || 0);
+      let volumenAntes, volumenDespues, variacionFinal;
 
-      let volumenDespues;
       const { fuente_actualizacion } = data;
       const valorFlujometro = parseFloat(litros_flujometro || 0);
 
       if (fuente_actualizacion === "FLUJOMETRO" && valorFlujometro > 0) {
         const litrosRealesRecibidos = tanquesArray.length > 1 ? parseFloat(tk.litros_recibidos || 0) : valorFlujometro;
-        volumenDespues = volumenAntes + litrosRealesRecibidos;
+        volumenAntes = volumenAntesSistema;
+        volumenDespues = volumenAntesSistema + litrosRealesRecibidos;
+        variacionFinal = litrosRealesRecibidos;
       } else {
+        // VARILLAJE: Respetar la medición física real del usuario
+        volumenAntes = parseFloat(tk.litros_iniciales || volumenAntesSistema);
         volumenDespues = parseFloat(tk.litros_finales || 0);
+        variacionFinal = parseFloat(tk.litros_recibidos || (volumenDespues - volumenAntes));
       }
 
       await MovimientoInventario.create({
@@ -128,7 +133,7 @@ exports.crearCargaCisterna = async (data, user, clientIp) => {
         tabla_referencia: "cargas_cisternas",
         volumen_antes: volumenAntes,
         volumen_despues: volumenDespues,
-        variacion: volumenDespues - volumenAntes,
+        variacion: variacionFinal,
         id_usuario: id_usuario,
         observaciones: `Recepción Cisterna Placa: ${placa_cisterna} (Origen: ${fuente_actualizacion})`
       }, { transaction: t });
