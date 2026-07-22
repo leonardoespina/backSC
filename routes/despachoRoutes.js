@@ -12,6 +12,9 @@ router.get("/solicitudes", despachoController.listarSolicitudesParaDespacho);
 // Validar Firma
 router.post("/validar-firma", despachoController.validarFirma);
 
+// Obtener templates legacy (PNGs) para validación en el frontend
+router.get("/templates-legacy", despachoController.obtenerTemplatesLegacy);
+
 // Imprimir Ticket
 router.post("/imprimir/:id", despachoController.imprimirTicket);
 

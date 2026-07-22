@@ -204,17 +204,21 @@ exports.compararHuellas = async (muestra1, muestra2) => {
   }
 
   try {
-    const response = await axios.post(
-      `${BIOMETRIC_SERVICE_URL}/api/verify`,
-      {
-        probe: muestra1,
-        candidate: muestra2,
-      },
-      {
-        timeout: BIOMETRIC_SERVICE_URL.includes("localhost") ? 10000 : 30000,
-        headers: { "Content-Type": "application/json" },
-      },
-    );
+    // ⚠️ DEUDA TÉCNICA DESACTIVADA: El frontend ahora hace la comparación localmente en C#.
+    // const response = await axios.post(
+    //   `${BIOMETRIC_SERVICE_URL}/api/verify`,
+    //   {
+    //     probe: muestra1,
+    //     candidate: muestra2,
+    //   },
+    //   {
+    //     timeout: BIOMETRIC_SERVICE_URL.includes("localhost") ? 10000 : 30000,
+    //     headers: { "Content-Type": "application/json" },
+    //   },
+    // );
+    // return response.data;
+    
+    throw new Error("Comparación desde el backend está desactivada. Use el endpoint C# local.");
 
     return response.data;
   } catch (error) {
@@ -263,25 +267,24 @@ exports.verificarIdentidad = async (cedula, muestraActual) => {
   const matchPromises = biometricData.templates.map(
     async (templateGuardado, index) => {
       try {
-        // console.log(`📤 Enviando comparación ${index + 1}...`);
-
-        const response = await axios.post(
-          `${BIOMETRIC_SERVICE_URL}/api/verify`,
-          {
-            probe: muestraActual,
-            candidate: templateGuardado,
-          },
-          {
-            timeout: BIOMETRIC_SERVICE_URL.includes("localhost")
-              ? 10000
-              : 30000,
-            headers: { "Content-Type": "application/json" },
-          },
-        );
-
-        const { match, score } = response.data;
-        // console.log(`✅ Template ${index + 1} - Score: ${score}, Match: ${match}`);
-        return score;
+        // ⚠️ DEUDA TÉCNICA DESACTIVADA: Se delega la validación biométrica al frontend.
+        // const response = await axios.post(
+        //   `${BIOMETRIC_SERVICE_URL}/api/verify`,
+        //   {
+        //     probe: muestraActual,
+        //     candidate: templateGuardado,
+        //   },
+        //   {
+        //     timeout: BIOMETRIC_SERVICE_URL.includes("localhost")
+        //       ? 10000
+        //       : 30000,
+        //     headers: { "Content-Type": "application/json" },
+        //   },
+        // );
+        // const { match, score } = response.data;
+          
+        throw new Error("Validación backend desactivada.");
+        // return score;
       } catch (error) {
         console.error(`❌ Error template ${index + 1}:`, error.message);
         return 0;

@@ -19,7 +19,7 @@ exports.listarSolicitudesParaDespacho = async (req, res) => {
  * Validar Firma Biométrica
  */
 exports.validarFirma = async (req, res) => {
-  const { cedula, huella, id_solicitud, validar_pertenencia } = req.body;
+  const { cedula, huella, id_solicitud, validar_pertenencia, huella_validada_localmente } = req.body;
 
   try {
     const result = await despachoService.validarFirma(
@@ -27,6 +27,7 @@ exports.validarFirma = async (req, res) => {
       huella,
       id_solicitud,
       validar_pertenencia === true,
+      huella_validada_localmente === true
     );
     res.json(result);
   } catch (error) {
@@ -54,6 +55,22 @@ exports.validarFirma = async (req, res) => {
       msg: "Error interno al validar firma biométrica.",
       details: error.message,
     });
+  }
+};
+
+/**
+ * Obtener Templates Legacy (PNGs) para validación local en el frontend
+ */
+exports.obtenerTemplatesLegacy = async (req, res) => {
+  const { cedula } = req.query;
+  try {
+    const result = await despachoService.obtenerTemplatesLegacy(cedula);
+    res.json(result);
+  } catch (error) {
+    if (error.message.includes("no encontrada") || error.message.includes("no tiene templates")) {
+      return res.status(404).json({ msg: error.message });
+    }
+    res.status(500).json({ msg: "Error al obtener templates legacy" });
   }
 };
 

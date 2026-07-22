@@ -91,7 +91,7 @@ exports.listarSolicitudesParaDespacho = async (query) => {
 /**
  * Validar Firma Biométrica
  */
-exports.validarFirma = async (cedula, huella, id_solicitud, validar_pertenencia = false) => {
+exports.validarFirma = async (cedula, huella, id_solicitud, validar_pertenencia = false, huella_validada_localmente = false) => {
   if (!cedula || !huella || !id_solicitud) {
     throw new Error("Faltan datos requeridos (cédula, huella, id_solicitud).");
   }
@@ -101,17 +101,43 @@ exports.validarFirma = async (cedula, huella, id_solicitud, validar_pertenencia 
     throw new Error("Solicitud no encontrada.");
   }
 
-  // Usamos el servicio de biometría existente
-  // verificarIdentidad ahora retorna persona con Subdependencias[]
-  const matchResult = await biometriaService.verificarIdentidad(cedula, huella);
+  let registro;
 
-  if (!matchResult.match) {
-    throw new Error(
-      "La huella no coincide con la cédula proporcionada o no está registrado.",
-    );
+  if (huella_validada_localmente) {
+    // NUEVA LÓGICA: El frontend ya validó la huella usando el middleware C#. 
+    // Solo buscamos el registro para confirmar permisos y existencia.
+    registro = await Biometria.findOne({
+      where: { cedula, estado: "ACTIVO" },
+      include: [
+        {
+          model: Subdependencia,
+          as: "Subdependencias",
+          attributes: ["id_subdependencia", "nombre"],
+          through: { attributes: [] },
+        },
+      ],
+    });
+
+    if (!registro) {
+      throw new Error("Persona no registrada o inactiva.");
+    }
+  } else {
+    // ⚠️ LÓGICA ANTIGUA (Delegaba al microservicio Java)
+    // const matchResult = await biometriaService.verificarIdentidad(cedula, huella);
+    // if (!matchResult.match) {
+    //   throw new Error("La huella no coincide con la cédula proporcionada o no está registrado.");
+    // }
+    // registro = matchResult.persona;
+
+    const matchResult = await biometriaService.verificarIdentidad(cedula, huella);
+
+    if (!matchResult.match) {
+      throw new Error(
+        "La huella no coincide con la cédula proporcionada o no está registrado.",
+      );
+    }
+    registro = matchResult.persona;
   }
-
-  const registro = matchResult.persona;
 
   const rolesDetectados = [];
   if (registro.rol === "RETIRO" || registro.rol === "AMBOS") {
@@ -154,6 +180,31 @@ exports.validarFirma = async (cedula, huella, id_solicitud, validar_pertenencia 
     },
     roles: rolesDetectados,
     id_biometria: registro.id_biometria,
+  };
+};
+
+/**
+ * Obtener templates legacy (PNGs)
+ */
+exports.obtenerTemplatesLegacy = async (cedula) => {
+  if (!cedula) throw new Error("Cédula requerida.");
+
+  const registro = await Biometria.findOne({
+    where: { cedula, estado: "ACTIVO" }
+  });
+
+  if (!registro) {
+    throw new Error("Persona no registrada o inactiva.");
+  }
+
+  const biometricData = JSON.parse(registro.template);
+  if (!biometricData || !biometricData.templates || biometricData.templates.length === 0) {
+    throw new Error("El usuario no tiene templates registrados.");
+  }
+
+  return {
+    success: true,
+    templates: biometricData.templates
   };
 };
 
