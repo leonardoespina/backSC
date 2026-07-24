@@ -242,10 +242,17 @@ exports.imprimirTicket = async (data, user, clientIp) => {
     }
 
     // Verificar huella del almacenista contra su cédula de usuario
-    const matchAlmacenista = await biometriaService.verificarIdentidad(
-      almacenistaSesion.cedula,
-      huella_almacenista,
-    );
+    let matchAlmacenista;
+    if (data.huella_validada_localmente) {
+      const registroAlmacenista = await Biometria.findOne({ where: { cedula: almacenistaSesion.cedula, estado: "ACTIVO" }, transaction: t });
+      if (!registroAlmacenista) throw new Error("Persona no registrada");
+      matchAlmacenista = { match: true, persona: registroAlmacenista };
+    } else {
+      matchAlmacenista = await biometriaService.verificarIdentidad(
+        almacenistaSesion.cedula,
+        huella_almacenista,
+      );
+    }
 
     if (!matchAlmacenista.match) {
       throw new Error("Almacenista No coincide con la Sesion");
@@ -261,10 +268,26 @@ exports.imprimirTicket = async (data, user, clientIp) => {
     }
 
     // Validar Receptor
-    const matchReceptor = await biometriaService.verificarIdentidad(
-      cedula_receptor,
-      huella_receptor,
-    );
+    let matchReceptor;
+    if (data.huella_validada_localmente) {
+      const registroReceptor = await Biometria.findOne({ 
+        where: { cedula: cedula_receptor, estado: "ACTIVO" }, 
+        include: [{
+          model: Subdependencia,
+          as: "Subdependencias",
+          attributes: ["id_subdependencia", "nombre"],
+          through: { attributes: [] },
+        }],
+        transaction: t 
+      });
+      if (!registroReceptor) throw new Error("Persona no registrada");
+      matchReceptor = { match: true, persona: registroReceptor };
+    } else {
+      matchReceptor = await biometriaService.verificarIdentidad(
+        cedula_receptor,
+        huella_receptor,
+      );
+    }
 
     if (!matchReceptor.match) {
       throw new Error(
