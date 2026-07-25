@@ -111,36 +111,13 @@ exports.generarCierre = async (data, user, clientIp) => {
     }
 
     return await executeTransaction(clientIp, async (t) => {
-        // 0. Validación Anti-Cierre Vacío: Verificar si hay operaciones pendientes
-        const qSolicitudesPendientes = await Solicitud.count({
-            where: {
-                id_cierre_turno: null,
-                id_llenadero,
-                estado: "FINALIZADA"
-            },
-            transaction: t
-        });
-
+        // 0. (Validación Anti-Cierre Vacío REMOVIDA para permitir registro de pases por tuberías)
         const tanquesLlenadero = await Tanque.findAll({
             where: { id_llenadero },
             attributes: ["id_tanque"],
             transaction: t,
         });
         const idsTanques = tanquesLlenadero.map((tk) => tk.id_tanque);
-
-        const qMovimientosPendientes = await MovimientoInventario.count({
-            where: {
-                id_cierre_turno: null,
-                id_tanque: { [Op.in]: idsTanques }
-            },
-            transaction: t
-        });
-
-        if (qSolicitudesPendientes === 0 && qMovimientosPendientes === 0) {
-            const error = new Error("No se puede generar un cierre en blanco. No existen despachos ni operaciones de inventario pendientes en este surtidor.");
-            error.statusCode = 400; // Opcional, dependiendo de la configuración de tu manejador de errores backend
-            throw error;
-        }
 
         // 1. Buscar una solicitud finalizada pendiente de cierre para obtener su PCP (id_validador)
         const solicitudConValidador = await Solicitud.findOne({

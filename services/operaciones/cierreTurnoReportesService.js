@@ -452,6 +452,8 @@ exports.generarActaTurno = async (id_cierre) => {
             nombre: repT.codigo,
             nivel_final: parseFloat(repT.stock_final || 0),
             nivel_inicial: parseFloat(repT.stock_inicial || 0),
+            nivel_teorico: parseFloat(medicionReal?.MedicionCierre?.volumen_teorico || repT.stock_final || 0),
+            diferencia: parseFloat(medicionReal?.MedicionCierre?.diferencia || 0),
             evaporizacion: evaporacionTanque,
             es_principal: false
         };
