@@ -44,13 +44,13 @@ async function generarKardexConsolidado({ fecha_desde, fecha_hasta, agruparPor =
       );
 
       const consolidado = movsPeriodo.reduce((acc, mov) => {
-        const val = parseFloat(mov.variacion);
+        const val = parseFloat(mov.variacion) || 0;
         switch (mov.tipo_movimiento) {
           case 'RECEPCION_CISTERNA': acc.recepcion += val; break;
           case 'TRANSFERENCIA_ENTRADA': acc.tr_entrada += val; break;
           case 'DESPACHO': 
             acc.despacho += Math.abs(val); 
-            acc.intercambio += parseFloat(mov.intercambio || 0);
+            acc.intercambio += parseFloat(mov.intercambio) || 0;
             break;
           case 'TRANSFERENCIA_SALIDA': acc.tr_salida += Math.abs(val); break;
           case 'AJUSTE_MEDICION':
@@ -176,7 +176,7 @@ async function obtenerStockInicialGlobal(fechaCorte, agruparGlobalmente, llenade
   const mapa = {};
   rows.forEach(r => {
     const key = agruparGlobalmente ? `GLOBAL_${r.id_tipo_combustible}` : `${r.id_llenadero}_${r.id_tipo_combustible}`;
-    mapa[key] = parseFloat(r.stock_inicial);
+    mapa[key] = parseFloat(r.stock_inicial) || 0;
   });
   return mapa;
 }
