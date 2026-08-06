@@ -46,7 +46,11 @@ async function generarKardexConsolidado({ fecha_desde, fecha_hasta, agruparPor =
       const consolidado = movsPeriodo.reduce((acc, mov) => {
         const val = parseFloat(mov.variacion) || 0;
         switch (mov.tipo_movimiento) {
-          case 'RECEPCION_CISTERNA': acc.recepcion += val; break;
+          case 'RECEPCION_CISTERNA': 
+            const valManual = mov.litros_recibidos_manual !== null && mov.litros_recibidos_manual !== undefined ? parseFloat(mov.litros_recibidos_manual) : val;
+            acc.recepcion += valManual;
+            acc.ajustes += (val - valManual);
+            break;
           case 'TRANSFERENCIA_ENTRADA': acc.tr_entrada += val; break;
           case 'DESPACHO': 
             acc.despacho += Math.abs(val); 
@@ -184,6 +188,12 @@ async function obtenerStockInicialGlobal(fechaCorte, agruparGlobalmente, llenade
 async function obtenerMovimientosRango(fechaInicio, fechaFin, llenaderosIds = [], combustiblesIds = []) {
   let sql = `
     SELECT mi.fecha_movimiento, t.id_llenadero, t.id_tipo_combustible, mi.tipo_movimiento, mi.variacion,
+           (CASE WHEN mi.tabla_referencia = 'cargas_cisternas' AND mi.tipo_movimiento = 'RECEPCION_CISTERNA' THEN 
+               COALESCE(
+                 (SELECT ct.litros_recibidos FROM cargas_cisterna_tanques ct WHERE ct.id_carga = mi.id_referencia AND ct.id_tanque = mi.id_tanque LIMIT 1),
+                 (SELECT c.litros_recibidos FROM cargas_cisterna c WHERE c.id_carga = mi.id_referencia)
+               )
+            ELSE NULL END) as litros_recibidos_manual,
            (CASE 
               WHEN mi.tabla_referencia = 'solicitudes' AND mi.tipo_movimiento = 'DESPACHO' THEN 
                 (SELECT s.cantidad_despachada 
