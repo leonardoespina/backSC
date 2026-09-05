@@ -27,7 +27,7 @@ exports.generarReporteTurno = async (id_cierre) => {
                 as: "Mediciones",
                 include: [
                     { model: Tanque, as: "Tanque", attributes: ["id_tanque", "codigo", "nombre"] },
-                    { model: MedicionTanque, as: "MedicionCierre", attributes: ["volumen_real"] },
+                    { model: MedicionTanque, as: "MedicionCierre", attributes: ["volumen_real", "merma_evaporacion", "volumen_teorico", "diferencia"] },
                 ],
             },
             {
@@ -462,6 +462,7 @@ exports.generarActaTurno = async (id_cierre) => {
             invGasolina.tanques.push(infoActa);
             invGasolina.saldo_inicial_total += infoActa.nivel_inicial;
             invGasolina.stock_total += infoActa.nivel_final;
+            invGasolina.evaporizacion_total += evaporacionTanque;
         } else {
             invGasoil.tanques.push(infoActa);
             invGasoil.saldo_inicial_total += infoActa.nivel_inicial;
@@ -480,12 +481,12 @@ exports.generarActaTurno = async (id_cierre) => {
     let observacionAuto = "";
     if (cisternasDuranteTurno && cisternasDuranteTurno.length > 0) {
         const totalCisterna = cisternasDuranteTurno.reduce((acc, mov) => acc + parseFloat(mov.variacion || 0), 0);
-        observacionAuto += `Se registró ingreso de cisterna por un total de ${totalCisterna} L. `;
+        observacionAuto += `Se registró ingreso de cisterna por un total de ${Number(totalCisterna.toFixed(2)).toLocaleString()} L. `;
     }
 
     if (transferenciasDuranteTurno && transferenciasDuranteTurno.length > 0) {
         const totalTrasiego = transferenciasDuranteTurno.reduce((acc, mov) => acc + Math.abs(parseFloat(mov.variacion || 0)), 0);
-        observacionAuto += `Durante el turno se contabilizaron trasiegos internos movilizando una sumatoria de ${totalTrasiego} L. `;
+        observacionAuto += `Durante el turno se contabilizaron trasiegos internos movilizando una sumatoria de ${Number(totalTrasiego.toFixed(2)).toLocaleString()} L. `;
     }
 
     let totalEvaporacion = 0;
@@ -494,7 +495,7 @@ exports.generarActaTurno = async (id_cierre) => {
     });
 
     if (totalEvaporacion > 0) {
-        observacionAuto += `Se registró una evaporación total de ${totalEvaporacion.toFixed(2)} L. `;
+        observacionAuto += `Se registró una evaporación total de ${Number(totalEvaporacion.toFixed(2)).toLocaleString()} L. `;
     }
 
     return {
