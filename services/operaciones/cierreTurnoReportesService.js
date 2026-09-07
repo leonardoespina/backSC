@@ -438,7 +438,7 @@ exports.generarActaTurno = async (id_cierre) => {
     const reporte = await exports.generarReporteTurno(id_cierre);
     const tanquesReporte = reporte.encabezado.tanques;
 
-    const invGasolina = { tanques: [], saldo_inicial_total: 0, stock_total: 0, evaporizacion_total: 0, consumo_total_despachos: consumoTotalGasolina };
+    const invGasolina = { tanques: [], saldo_inicial_total: 0, stock_total: 0, diferencia_total: 0, evaporizacion_total: 0, consumo_total_despachos: consumoTotalGasolina };
     const invGasoil = { tanques: [], saldo_inicial_total: 0, stock_total: 0 };
 
     tanquesReporte.forEach(repT => {
@@ -462,6 +462,7 @@ exports.generarActaTurno = async (id_cierre) => {
             invGasolina.tanques.push(infoActa);
             invGasolina.saldo_inicial_total += infoActa.nivel_inicial;
             invGasolina.stock_total += infoActa.nivel_final;
+            invGasolina.diferencia_total += infoActa.diferencia;
             invGasolina.evaporizacion_total += evaporacionTanque;
         } else {
             invGasoil.tanques.push(infoActa);
