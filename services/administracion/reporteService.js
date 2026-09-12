@@ -723,7 +723,7 @@ async function getReporteDesviaciones({ fecha_desde, fecha_hasta, id_llenadero, 
 
         resultados.push({
             id: `CC-${c.id_carga}`,
-            fecha: c.fecha_llegada.toISOString().split("T")[0], // Convertir a YYYY-MM-DD
+            fecha: c.fecha_recepcion || (c.fecha_llegada ? c.fecha_llegada.toISOString().split("T")[0] : null), // Priorizar fecha_recepcion de la carga
             llenadero: llenaderoObj ? llenaderoObj.nombre_llenadero : "Desconocido",
             id_llenadero: id_llenadero_carga,
             tipo_combustible: c.TipoCombustible.nombre,
