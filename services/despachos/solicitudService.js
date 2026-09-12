@@ -373,22 +373,25 @@ exports.listarSolicitudes = async (query, user) => {
   }
 
   // Todos los roles (excepto ADMIN y SOLICITANTE) filtran por su dependencia
+  // EXCEPCIÓN: Los INSPECTOR (PCP) validan tickets de todas las dependencias en el llenadero.
+  // Tampoco se debe restringir por dependencia si la consulta es de tickets en estado FINALIZADA
+  // (destinada a control de despacho y validación en llenaderos).
   const ROLES_FILTRAN_POR_DEPENDENCIA = [
     "GERENTE",
     "JEFE DIVISION",
     "ALMACENISTA",
     "SUPERVISOR",
     "COORDINADOR",
-    "INSPECTOR",
   ];
 
-  if (ROLES_FILTRAN_POR_DEPENDENCIA.includes(tipo_usuario)) {
+  if (ROLES_FILTRAN_POR_DEPENDENCIA.includes(tipo_usuario) && query.estado !== "FINALIZADA") {
     if (id_dependencia) {
       where.id_dependencia = id_dependencia;
     }
   }
 
   if (query.estado) where.estado = query.estado;
+  if (query.id_llenadero) where.id_llenadero = query.id_llenadero;
   if (query.fecha_inicio && query.fecha_fin) {
     where.fecha_solicitud = {
       [Op.between]: [query.fecha_inicio, query.fecha_fin],
@@ -396,6 +399,10 @@ exports.listarSolicitudes = async (query, user) => {
   }
 
   const searchableFields = ["codigo_ticket", "placa", "flota"];
+
+  const order = query.estado === "FINALIZADA"
+    ? [["fecha_validacion", "DESC"], ["id_solicitud", "DESC"]]
+    : [["fecha_solicitud", "DESC"]];
 
   return await paginate(Solicitud, query, {
     where,
@@ -415,7 +422,7 @@ exports.listarSolicitudes = async (query, user) => {
       { model: TipoCombustible, attributes: ["nombre"], where: { activo: true }, required: false },
       { model: Llenadero, attributes: ["nombre_llenadero"] },
     ],
-    order: [["fecha_solicitud", "DESC"]],
+    order,
   });
 };
 
