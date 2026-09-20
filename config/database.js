@@ -10,7 +10,14 @@ const sequelize = new Sequelize(
     port: process.env.DB_PORT || 5432, // ← Agregado puerto por defecto de PostgreSQL
     dialect: "postgres",
     timezone: "-04:00",
-    logging: false, // Desactiva logs de SQL en consola para limpieza
+    logging: false, 
+    dialectOptions: process.env.DB_HOST.includes("render.com") ?{
+      ssl:{
+        require: true,
+        rejectUnauthorized:false
+      }
+    }: {},
+      // Desactiva logs de SQL en consola para limpi
     pool: { // ← Recomendado para producción
       max: 5,
       min: 0,
