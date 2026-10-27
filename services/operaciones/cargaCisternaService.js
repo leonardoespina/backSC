@@ -23,6 +23,7 @@ exports.crearCargaCisterna = async (data, user, clientIp) => {
     hora,
     placa_cisterna,
     nombre_chofer,
+    proveedor,
     litros_segun_guia,
     diferencia_guia,
     litros_flujometro,
@@ -71,6 +72,7 @@ exports.crearCargaCisterna = async (data, user, clientIp) => {
         fecha_llegada: `${fecha}T${hora}`,
         placa_cisterna,
         nombre_chofer,
+        proveedor: proveedor || null,
         id_almacenista: id_usuario,
         id_tipo_combustible: primerTanque.id_tipo_combustible,
         litros_segun_guia,
@@ -161,7 +163,7 @@ exports.listarCargasCisterna = async (query) => {
     where.fecha_llegada = { [Op.between]: [fecha_inicio, fecha_fin] };
   }
 
-  const searchableFields = ["numero_guia", "placa_cisterna", "observacion"];
+  const searchableFields = ["numero_guia", "placa_cisterna", "proveedor", "observacion"];
 
   const pagedResult = await paginate(CargaCisterna, query, {
     where,

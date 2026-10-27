@@ -531,6 +531,7 @@ async function getReporteRecepcionCisterna({ fecha_desde, fecha_hasta, id_llenad
             id: carga.id_carga,
             placa: carga.placa_cisterna,
             factura: carga.numero_guia,
+            proveedor: carga.proveedor || "N/A",
             fecha_factura: carga.fecha_emision || carga.fecha_llegada.toISOString().split('T')[0],
             combustible: combustible,
             mes: mesNombre,

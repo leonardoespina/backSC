@@ -35,6 +35,12 @@ const CargaCisterna = sequelize.define(
       allowNull: true,
       comment: "Nombre del chofer (Ingreso manual)",
     },
+    proveedor: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+      defaultValue: null,
+      comment: "Empresa o entidad proveedora (MIBITURVEN, CVM, etc.)",
+    },
     id_almacenista: {
       type: DataTypes.INTEGER,
       allowNull: false,
