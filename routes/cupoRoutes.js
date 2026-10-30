@@ -69,4 +69,18 @@ router.post(
   },
 );
 
+// Obtener recargas de un cupo actual
+router.get(
+  "/recargas/:id_cupo_actual",
+  [autenticarUsuario, authorizePermission(PERMISSIONS.MANAGE_SYSTEM)],
+  cupoController.obtenerRecargasCupo,
+);
+
+// Editar una recarga existente
+router.put(
+  "/recargas/:id_recarga",
+  [autenticarUsuario, authorizePermission(PERMISSIONS.MANAGE_SYSTEM), criticalLimiter],
+  cupoController.editarRecargaCupo,
+);
+
 module.exports = router;

@@ -180,3 +180,48 @@ exports.reiniciarCuposMensuales = async (req, res) => {
     return { success: false, error: error.message };
   }
 };
+
+/**
+ * Obtener las recargas de un cupo actual específico
+ */
+exports.obtenerRecargasCupo = async (req, res) => {
+  const { id_cupo_actual } = req.params;
+
+  try {
+    const recargas = await cupoService.obtenerRecargasCupo(id_cupo_actual);
+    res.json(recargas);
+  } catch (error) {
+    console.error("Error al obtener recargas del cupo:", error);
+    res.status(500).json({ msg: "Error al obtener recargas del cupo" });
+  }
+};
+
+/**
+ * Editar una recarga existente
+ */
+exports.editarRecargaCupo = async (req, res) => {
+  const { id_recarga } = req.params;
+  const id_usuario = req.usuario.id_usuario;
+
+  try {
+    const result = await cupoService.editarRecargaCupo(id_recarga, req.body, id_usuario, req.ip);
+
+    if (req.io) {
+      req.io.emit("cupo:recarga", {
+        id_cupo_actual: result.id_cupo_actual,
+        nuevo_saldo: result.saldo_nuevo,
+      });
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error("Error al editar la recarga:", error);
+    if (error.message.includes("No se encontró")) {
+      return res.status(404).json({ msg: error.message });
+    }
+    if (error.message.includes("No se puede reducir") || error.message.includes("mayor o igual")) {
+      return res.status(400).json({ msg: error.message });
+    }
+    res.status(500).json({ msg: error.message || "Error al editar la recarga" });
+  }
+};

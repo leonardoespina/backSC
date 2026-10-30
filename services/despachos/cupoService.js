@@ -7,6 +7,7 @@ const Categoria = require("../../models/Categoria");
 const Dependencia = require("../../models/Dependencia");
 const Subdependencia = require("../../models/Subdependencia");
 const TipoCombustible = require("../../models/TipoCombustible");
+const Usuario = require("../../models/Usuario");
 const { paginate } = require("../../helpers/paginationHelper");
 const { executeTransaction } = require("../../helpers/transactionHelper");
 const { Op } = require("sequelize");
@@ -495,6 +496,115 @@ exports.recargarCupo = async (data, userId, clientIp) => {
       saldo_anterior: parseFloat(cupoActual.cantidad_disponible),
       saldo_nuevo: nuevaDisponibilidad,
       id_cupo_actual: cupoActual.id_cupo_actual,
+    };
+  });
+};
+
+/**
+ * Obtener las recargas de un cupo actual específico
+ * @param {number} id_cupo_actual
+ */
+exports.obtenerRecargasCupo = async (id_cupo_actual) => {
+  return await RecargaCupo.findAll({
+    where: { id_cupo_actual },
+    include: [
+      {
+        model: Usuario,
+        as: "AutorizadoPor",
+        attributes: ["id_usuario", "nombre", "apellido"],
+      },
+    ],
+    order: [["fecha_recarga", "DESC"]],
+  });
+};
+
+/**
+ * Editar una recarga existente (ajustando la disponibilidad y total recargado)
+ * @param {number} id_recarga
+ * @param {Object} data { cantidad, motivo }
+ * @param {number} userId
+ * @param {string} clientIp
+ */
+exports.editarRecargaCupo = async (id_recarga, data, userId, clientIp) => {
+  const { cantidad, motivo } = data;
+
+  if (cantidad === undefined || cantidad === null || isNaN(cantidad) || parseFloat(cantidad) < 0) {
+    throw new Error("La cantidad debe ser un número mayor o igual a 0");
+  }
+
+  return await executeTransaction(clientIp || "127.0.0.1", async (t) => {
+    const recarga = await RecargaCupo.findByPk(id_recarga, {
+      transaction: t,
+      lock: true,
+    });
+
+    if (!recarga) {
+      throw new Error("No se encontró la recarga especificada");
+    }
+
+    const cupoActual = await CupoActual.findByPk(recarga.id_cupo_actual, {
+      transaction: t,
+      lock: true,
+    });
+
+    if (!cupoActual) {
+      throw new Error("No se encontró el cupo actual asociado a la recarga");
+    }
+
+    const cantidadAnterior = parseFloat(recarga.cantidad_recargada);
+    const cantidadNueva = parseFloat(cantidad);
+    const delta = cantidadNueva - cantidadAnterior;
+
+    const nuevaDisponibilidad = parseFloat(cupoActual.cantidad_disponible) + delta;
+    const nuevoTotalRecargado = parseFloat(cupoActual.cantidad_recargada) + delta;
+
+    if (nuevaDisponibilidad < 0) {
+      throw new Error(
+        `No se puede reducir la recarga a ${cantidadNueva} L porque la disponibilidad quedaría negativa (${nuevaDisponibilidad.toFixed(2)} L). La dependencia ya ha consumido parte de ese combustible.`
+      );
+    }
+
+    if (nuevoTotalRecargado < 0) {
+      throw new Error("El total recargado no puede ser menor a 0");
+    }
+
+    // Actualizar la recarga
+    await recarga.update(
+      {
+        cantidad_recargada: cantidadNueva,
+        motivo: motivo !== undefined ? motivo : recarga.motivo,
+        autorizado_por: userId,
+      },
+      { transaction: t }
+    );
+
+    // Ajustar estado del cupo según la nueva disponibilidad
+    let nuevoEstado = cupoActual.estado;
+    if (nuevaDisponibilidad === 0) {
+      nuevoEstado = "AGOTADO";
+    } else if (nuevaDisponibilidad > 0 && cupoActual.estado === "AGOTADO") {
+      nuevoEstado = "ACTIVO";
+    }
+
+    await cupoActual.update(
+      {
+        cantidad_disponible: nuevaDisponibilidad,
+        cantidad_recargada: nuevoTotalRecargado,
+        estado: nuevoEstado,
+      },
+      { transaction: t }
+    );
+
+    return {
+      exito: true,
+      msg: "Recarga modificada exitosamente",
+      id_recarga: recarga.id_recarga,
+      id_cupo_actual: cupoActual.id_cupo_actual,
+      cantidad_anterior: cantidadAnterior,
+      cantidad_nueva: cantidadNueva,
+      saldo_nuevo: nuevaDisponibilidad,
+      total_recargado_nuevo: nuevoTotalRecargado,
+      estado: nuevoEstado,
     };
   });
 };
