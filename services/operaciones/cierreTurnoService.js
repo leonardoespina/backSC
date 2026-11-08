@@ -85,8 +85,8 @@ exports.obtenerTanquesLlenaderoConNivel = async (id_llenadero) => {
 /**
  * Genera el cierre de turno en un solo paso:
  *  1. Crea CierreTurno en estado CERRADO
- *  2. Por cada tanque: crea MedicionTanque tipo=CIERRE, recalibra nivel_actual,
- *     registra MovimientoInventario tipo=AJUSTE_MEDICION
+ *  2. Por cada tanque: crea MedicionTanque tipo=CIERRE (solo para auditoría/control,
+ *     SIN modificar tanque.nivel_actual ni insertar AJUSTE_MEDICION)
  *  3. Asigna todas las Solicitudes FINALIZADA pendientes del llenadero
  *  4. Asigna todos los MovimientoInventario pendientes del llenadero
  *
@@ -150,7 +150,7 @@ exports.generarCierre = async (data, user, clientIp) => {
             { transaction: t }
         );
 
-        // 2. Medición CIERRE por tanque + recalibrar nivel
+        // 2. Medición CIERRE por tanque (Solo registro de auditoría, NO recalibra nivel_actual)
         for (const med of mediciones) {
             const tanque = await Tanque.findByPk(med.id_tanque, {
                 transaction: t,
@@ -165,7 +165,7 @@ exports.generarCierre = async (data, user, clientIp) => {
                 throw new Error(`Volumen inválido detectado para el tanque ID ${med.id_tanque}. Verifique que el valor ingresado esté en la tabla de aforo.`);
             }
 
-            // Crear medición de cierre
+            // Crear medición de cierre (únicamente como fotografía de control/auditoría)
             const medicionCierre = await MedicionTanque.create(
                 {
                     id_tanque: med.id_tanque,
@@ -184,26 +184,9 @@ exports.generarCierre = async (data, user, clientIp) => {
                 { transaction: t }
             );
 
-            // Recalibrar nivel_actual del tanque
-            await tanque.update({ nivel_actual: v_real }, { transaction: t });
-
-            // Movimiento de ajuste por recalibración
-            await MovimientoInventario.create(
-                {
-                    id_tanque: med.id_tanque,
-                    id_cierre_turno: cierre.id_cierre,
-                    tipo_movimiento: "AJUSTE_MEDICION",
-                    id_referencia: medicionCierre.id_medicion,
-                    tabla_referencia: "mediciones_tanque",
-                    volumen_antes,
-                    volumen_despues: v_real,
-                    variacion: parseFloat((v_real - volumen_antes).toFixed(2)),
-                    fecha_movimiento: new Date(),
-                    id_usuario,
-                    observaciones: `Cierre de turno #${cierre.id_cierre}`,
-                },
-                { transaction: t }
-            );
+            // NOTA: Se desacopla la medición manual de vara del stock operativo del tanque.
+            // El stock del tanque se rige exclusivamente por recepciones y despachos reales.
+            // Por ello NO se actualiza tanque.nivel_actual ni se inserta AJUSTE_MEDICION.
 
             // Detalle en CierreTurnoMedicion
             await CierreTurnoMedicion.create(
@@ -346,13 +329,11 @@ exports.listarCierres = async (query) => {
  * Condiciones requeridas:
  *  a) El cierre debe estar en estado "CERRADO"
  *  b) Debe ser el ÚLTIMO cierre del llenadero
- *  c) Por cada tanque medido, el último movimiento del ledger debe ser
- *     el AJUSTE_MEDICION de este cierre (Regla de Oro)
  *
  * Acción atómica:
  *  1. Desvincula Solicitudes → id_cierre_turno = NULL
  *  2. Desvincula movimientos de despacho/cisterna → id_cierre_turno = NULL
- *  3. Por cada tanque: restaura nivel, anula MedicionTanque, destruye el ajuste
+ *  3. Por cada tanque: anula MedicionTanque (y si era un cierre antiguo con AJUSTE_MEDICION, restaura nivel y destruye el ajuste)
  *  4. Marca CierreTurno → estado "ANULADO"
  */
 exports.revertirCierre = async (id_cierre, clientIp) => {
@@ -402,28 +383,38 @@ exports.revertirCierre = async (id_cierre, clientIp) => {
             throw err;
         }
 
-        // 3. Validar la Regla de Oro por cada tanque medido en el cierre
+        // 3. Verificar si este cierre generó movimientos AJUSTE_MEDICION (retrocompatibilidad con cierres antiguos)
         const ajustesACancelar = [];
         for (const detalleMedicion of cierre.Mediciones) {
-            const ultimoMovimiento = await MovimientoInventario.findOne({
-                where: { id_tanque: detalleMedicion.id_tanque },
+            const ajusteCierre = await MovimientoInventario.findOne({
+                where: {
+                    id_tanque: detalleMedicion.id_tanque,
+                    id_cierre_turno: cierre.id_cierre,
+                    tipo_movimiento: "AJUSTE_MEDICION",
+                },
                 order: [["id_movimiento", "DESC"]],
                 transaction: t,
             });
 
-            if (
-                !ultimoMovimiento ||
-                ultimoMovimiento.id_cierre_turno !== cierre.id_cierre ||
-                ultimoMovimiento.tipo_movimiento !== "AJUSTE_MEDICION"
-            ) {
-                const err = new Error(
-                    `No se puede revertir. El Tanque ID ${detalleMedicion.id_tanque} tiene ` +
-                        `movimientos de inventario posteriores al cierre. Revierte esas operaciones primero.`
-                );
-                err.statusCode = 409;
-                throw err;
+            if (ajusteCierre) {
+                const ultimoMovimiento = await MovimientoInventario.findOne({
+                    where: { id_tanque: detalleMedicion.id_tanque },
+                    order: [["id_movimiento", "DESC"]],
+                    transaction: t,
+                });
+
+                if (!ultimoMovimiento || ultimoMovimiento.id_movimiento !== ajusteCierre.id_movimiento) {
+                    const err = new Error(
+                        `No se puede revertir. El Tanque ID ${detalleMedicion.id_tanque} tiene ` +
+                            `movimientos de inventario posteriores al cierre. Revierte esas operaciones primero.`
+                    );
+                    err.statusCode = 409;
+                    throw err;
+                }
+                ajustesACancelar.push({ detalleMedicion, ajuste: ajusteCierre });
+            } else {
+                ajustesACancelar.push({ detalleMedicion, ajuste: null });
             }
-            ajustesACancelar.push({ detalleMedicion, ajuste: ultimoMovimiento });
         }
 
         // 4. Desvincular Solicitudes del cierre (quedan pendientes de reasignación)
@@ -432,7 +423,7 @@ exports.revertirCierre = async (id_cierre, clientIp) => {
             { where: { id_cierre_turno: id_cierre }, transaction: t }
         );
 
-        // 5. Desvincular movimientos de despacho/cisterna (excluye AJUSTE_MEDICION que se destruyen)
+        // 5. Desvincular movimientos de despacho/cisterna (excluye AJUSTE_MEDICION que se destruyen si existen)
         await MovimientoInventario.update(
             { id_cierre_turno: null },
             {
@@ -444,15 +435,21 @@ exports.revertirCierre = async (id_cierre, clientIp) => {
             }
         );
 
-        // 6. Por cada tanque medido: restaurar nivel, anular medición y limpiar ledger
+        // 6. Por cada tanque medido: anular medición (y restaurar nivel solo si tuvo ajuste antiguo)
         const tanquesRestaurados = [];
         for (const { detalleMedicion, ajuste } of ajustesACancelar) {
             const tanque = await Tanque.findByPk(detalleMedicion.id_tanque, {
                 transaction: t,
                 lock: true,
             });
-            const nivelRestaurado = parseFloat(ajuste.volumen_antes);
-            await tanque.update({ nivel_actual: nivelRestaurado }, { transaction: t });
+
+            let nivelRestaurado = parseFloat(tanque.nivel_actual);
+
+            if (ajuste) {
+                nivelRestaurado = parseFloat(ajuste.volumen_antes);
+                await tanque.update({ nivel_actual: nivelRestaurado }, { transaction: t });
+                await ajuste.destroy({ transaction: t });
+            }
 
             if (detalleMedicion.MedicionCierre) {
                 await MedicionTanque.update(
@@ -464,7 +461,6 @@ exports.revertirCierre = async (id_cierre, clientIp) => {
                 );
             }
 
-            await ajuste.destroy({ transaction: t });
             tanquesRestaurados.push({ id_tanque: detalleMedicion.id_tanque, nivelRestaurado });
         }
 
@@ -474,5 +470,3 @@ exports.revertirCierre = async (id_cierre, clientIp) => {
         return { cierre, tanquesRestaurados };
     });
 };
-
-
