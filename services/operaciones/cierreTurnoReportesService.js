@@ -56,21 +56,20 @@ exports.generarReporteTurno = async (id_cierre) => {
         order: [["codigo", "ASC"]],
     });
 
-    // Mapa de tanques medidos en el cierre (id_tanque → volumen_real)
-    const medicionFinalMap = {};
+    // Inicializar stockMap oficial por CONSUMO (volumen del sistema):
+    // Prioridad: volumen_teorico registrado al momento del cierre en MedicionCierre,
+    // o fallback al nivel_actual del tanque.
+    const stockSistemaFinalMap = {};
     for (const med of cierre.Mediciones) {
-        if (med.MedicionCierre?.volumen_real != null) {
-            medicionFinalMap[med.id_tanque] = parseFloat(med.MedicionCierre.volumen_real);
+        if (med.MedicionCierre?.volumen_teorico != null) {
+            stockSistemaFinalMap[med.id_tanque] = parseFloat(med.MedicionCierre.volumen_teorico);
         }
     }
 
-    // Inicializar stockMap:
-    //  - Tanques con medición de cierre → volumen_real (stock final real)
-    //  - Tanques sin medición → nivel_actual (se usará como referencia estable)
     const stockMap = {};
     for (const t of todosLosTanques) {
         stockMap[t.id_tanque] =
-            medicionFinalMap[t.id_tanque] ?? parseFloat(t.nivel_actual || 0);
+            stockSistemaFinalMap[t.id_tanque] ?? parseFloat(t.nivel_actual || 0);
     }
 
 
@@ -208,8 +207,9 @@ exports.generarReporteTurno = async (id_cierre) => {
     if (cierreAnterior) {
         for (const t of todosLosTanques) {
             const medAnterior = cierreAnterior.Mediciones.find(m => m.id_tanque === t.id_tanque);
-            if (medAnterior && medAnterior.MedicionCierre?.volumen_real != null) {
-                stockInicial[t.id_tanque] = parseFloat(medAnterior.MedicionCierre.volumen_real);
+            // Tomamos el volumen del SISTEMA (consumo/teórico) del cierre anterior, NO la vara
+            if (medAnterior && medAnterior.MedicionCierre?.volumen_teorico != null) {
+                stockInicial[t.id_tanque] = parseFloat(medAnterior.MedicionCierre.volumen_teorico);
             }
         }
     }
@@ -353,9 +353,11 @@ exports.generarReporteTurno = async (id_cierre) => {
                     codigo: t.codigo,
                     nombre: t.nombre,
                     combustible: t.TipoCombustible?.nombre || "Sin Especificar",
-                    stock_inicial: stockInicial[t.id_tanque] ?? null,
-                    // Para tanques sin medición de cierre, usar nivel_actual como stock final de referencia
-                    stock_final: medDet?.MedicionCierre?.volumen_real ?? parseFloat(t.nivel_actual || 0),
+                    stock_inicial: stockInicial[t.id_tanque] != null ? parseFloat(stockInicial[t.id_tanque].toFixed(2)) : null,
+                    // Stock final oficial 100% por consumo y eventos del turno
+                    stock_final: stockProgresivo[t.id_tanque] != null
+                        ? parseFloat(stockProgresivo[t.id_tanque].toFixed(2))
+                        : (medDet?.MedicionCierre?.volumen_teorico ?? parseFloat(t.nivel_actual || 0)),
                 };
             }),
         },
@@ -439,22 +441,21 @@ exports.generarActaTurno = async (id_cierre) => {
     const tanquesReporte = reporte.encabezado.tanques;
 
     const invGasolina = { tanques: [], saldo_inicial_total: 0, stock_total: 0, diferencia_total: 0, evaporizacion_total: 0, consumo_total_despachos: consumoTotalGasolina };
-    const invGasoil = { tanques: [], saldo_inicial_total: 0, stock_total: 0 };
+    const invGasoil = { tanques: [], saldo_inicial_total: 0, stock_total: 0, diferencia_total: 0, evaporizacion_total: 0, consumo_total_despachos: consumoTotalGasoil };
 
     tanquesReporte.forEach(repT => {
         const comb = repT.combustible?.toUpperCase() || "";
 
-        // Buscar medición real si existe para este tanque
-        const medicionReal = cierre.Mediciones.find(m => m.id_tanque === repT.id_tanque);
-        const evaporacionTanque = parseFloat(medicionReal?.MedicionCierre?.merma_evaporacion || 0);
+        const stockFinal = parseFloat(repT.stock_final || 0);
+        const stockInicial = parseFloat(repT.stock_inicial || 0);
 
         const infoActa = {
             nombre: repT.codigo,
-            nivel_final: parseFloat(repT.stock_final || 0),
-            nivel_inicial: parseFloat(repT.stock_inicial || 0),
-            nivel_teorico: parseFloat(medicionReal?.MedicionCierre?.volumen_teorico || repT.stock_final || 0),
-            diferencia: parseFloat(medicionReal?.MedicionCierre?.diferencia || 0),
-            evaporizacion: evaporacionTanque,
+            nivel_final: stockFinal,
+            nivel_inicial: stockInicial,
+            nivel_teorico: stockFinal,
+            diferencia: 0,
+            evaporizacion: 0,
             es_principal: false
         };
 
@@ -462,14 +463,17 @@ exports.generarActaTurno = async (id_cierre) => {
             invGasolina.tanques.push(infoActa);
             invGasolina.saldo_inicial_total += infoActa.nivel_inicial;
             invGasolina.stock_total += infoActa.nivel_final;
-            invGasolina.diferencia_total += infoActa.diferencia;
-            invGasolina.evaporizacion_total += evaporacionTanque;
         } else {
             invGasoil.tanques.push(infoActa);
             invGasoil.saldo_inicial_total += infoActa.nivel_inicial;
             invGasoil.stock_total += infoActa.nivel_final;
         }
     });
+
+    invGasolina.saldo_inicial_total = parseFloat(invGasolina.saldo_inicial_total.toFixed(2));
+    invGasolina.stock_total = parseFloat(invGasolina.stock_total.toFixed(2));
+    invGasoil.saldo_inicial_total = parseFloat(invGasoil.saldo_inicial_total.toFixed(2));
+    invGasoil.stock_total = parseFloat(invGasoil.stock_total.toFixed(2));
 
     const cisternasDuranteTurno = await MovimientoInventario.findAll({
         where: { id_cierre_turno: id_cierre, tipo_movimiento: "RECEPCION_CISTERNA" }
@@ -509,7 +513,7 @@ exports.generarActaTurno = async (id_cierre) => {
             fecha_cierre: cierre.fecha_lote + " " + (cierre.hora_cierre_lote || "00:00:00")
         },
         seccion_principal: {
-            nivel_inicio: tanquesReporte.reduce((s, rt) => s + rt.stock_inicial, 0),
+            nivel_inicio: invGasoil.saldo_inicial_total,
             consumo_planta: consumoPlanta,
             total_disponible: invGasoil.stock_total,
             consumo_total_despachos: consumoVehiculosGasoil, // En el componente se usa como "consumoVehiculosNeto"
