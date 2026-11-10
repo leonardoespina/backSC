@@ -20,7 +20,8 @@ const {
     Llenadero,
     CargaCisternaTanque,
     MedicionTanque,
-    CierreTurno
+    CierreTurno,
+    SolicitudDistribucion
 } = require("../../models");
 const { Op } = require("sequelize");
 const sequelize = require("sequelize");
@@ -50,6 +51,16 @@ function buildDateRange(fecha_desde, fecha_hasta, hora_desde = "00:00:00", hora_
 /** Formatea los datos del vehículo según tipo_suministro. */
 function formatVehiculo(solicitud) {
     if (solicitud.tipo_suministro === "BIDON") {
+        if (solicitud.es_nodriza) {
+            const marca = solicitud.Vehiculo?.Marca?.nombre || solicitud.marca || "";
+            const modelo = solicitud.Vehiculo?.Modelo?.nombre || solicitud.modelo || "";
+            const vehiculoNom = `${marca} ${modelo}`.trim();
+            const tieneVehiculoReal = vehiculoNom && vehiculoNom !== "NO APLICA";
+            return {
+                vehiculo: tieneVehiculoReal ? `MAESTRO (${vehiculoNom})` : "MAESTRO (DISTRIBUCION)",
+                placa: (solicitud.Vehiculo?.placa || solicitud.placa || "NO APLICA").toUpperCase(),
+            };
+        }
         return { vehiculo: "BIDÓN", placa: "NO APLICA" };
     }
     const marca = solicitud.Vehiculo?.Marca?.nombre || solicitud.marca || "";
@@ -71,6 +82,65 @@ function formatHora(fecha) {
 // ─────────────────────────────────────────────
 // REPORTE DIARIO
 // ─────────────────────────────────────────────
+
+/** Procesa y formatea el estado de distribución de un ticket maestro. */
+function procesarDistribuciones(s) {
+    if (!s.es_nodriza) {
+        return {
+            es_nodriza: false,
+            estado_rendicion: "-",
+            total_distribuido: 0,
+            saldo_pendiente: 0,
+            distribuciones: [],
+        };
+    }
+
+    const cant_desp = parseFloat(s.cantidad_despachada || 0);
+    let total_distribuido = 0;
+    const lista = (s.Distribuciones || []).map((d) => {
+        const marca = d.Vehiculo?.Marca?.nombre || "";
+        const modelo = d.Vehiculo?.Modelo?.nombre || "";
+        const vehiculo = `${marca} ${modelo}`.trim() || "Equipo Sin Identificar";
+        const litros = parseFloat(d.cantidad_litros || 0);
+        total_distribuido += litros;
+
+        const dFecha = d.fecha_distribucion ? new Date(d.fecha_distribucion) : null;
+        const fechaHoraStr = dFecha ? `${dFecha.toLocaleDateString("es-VE")} ${formatHora(dFecha)}` : "-";
+
+        return {
+            id_distribucion: d.id_distribucion,
+            ticket_maestro: s.codigo_ticket,
+            fecha_distribucion: d.fecha_distribucion,
+            fecha_hora: fechaHoraStr,
+            vehiculo,
+            placa: d.Vehiculo?.placa || "S/P",
+            litros,
+            frente: d.observaciones || "S/O",
+            registrador: d.Registrador ? `${d.Registrador.nombre} ${d.Registrador.apellido}` : "S/I",
+        };
+    });
+
+    total_distribuido = parseFloat(total_distribuido.toFixed(2));
+    const saldo_pendiente = parseFloat(Math.max(0, cant_desp - total_distribuido).toFixed(2));
+    let estado_rendicion = "PENDIENTE (0%)";
+    if (cant_desp > 0) {
+        if (total_distribuido >= cant_desp - 0.001) {
+            estado_rendicion = "RENDIDO (100%)";
+        } else if (total_distribuido > 0) {
+            const pct = Math.round((total_distribuido / cant_desp) * 100);
+            estado_rendicion = `EN PROCESO (${pct}%) - Saldo: ${saldo_pendiente} L`;
+        }
+    }
+
+    return {
+        es_nodriza: true,
+        estado_rendicion,
+        total_distribuido,
+        saldo_pendiente,
+        distribuciones: lista,
+    };
+}
+
 
 /**
  * Genera el reporte diario de un llenadero agrupado en INSTITUCIONAL y VENTA.
@@ -150,11 +220,29 @@ async function getReporteDiario({ id_llenadero, fecha_desde, fecha_hasta, hora_d
                 include: [{ model: Moneda, as: "Moneda", attributes: ["nombre", "simbolo"] }],
             },
             { model: TipoCombustible, attributes: ["nombre"] },
+            {
+                model: SolicitudDistribucion,
+                as: "Distribuciones",
+                required: false,
+                include: [
+                    {
+                        model: Vehiculo,
+                        as: "Vehiculo",
+                        required: false,
+                        attributes: ["placa"],
+                        include: [
+                            { model: Marca, as: "Marca", attributes: ["nombre"] },
+                            { model: Modelo, as: "Modelo", attributes: ["nombre"] },
+                        ],
+                    },
+                    { model: Usuario, as: "Registrador", attributes: ["nombre", "apellido"] },
+                ],
+            },
         ],
         attributes: [
             "id_solicitud", "codigo_ticket", "fecha_validacion",
             "cantidad_litros", "cantidad_despachada", "monto_total",
-            "precio_unitario", "tipo_solicitud", "tipo_suministro", "placa", "marca", "modelo",
+            "precio_unitario", "tipo_solicitud", "tipo_suministro", "es_nodriza", "placa", "marca", "modelo",
             "id_aprobador", "id_receptor"
         ],
         order: [["id_solicitud", "ASC"]],
@@ -176,6 +264,8 @@ async function getReporteDiario({ id_llenadero, fecha_desde, fecha_hasta, hora_d
             saldosPorMoneda[simbolo] = (saldosPorMoneda[simbolo] || 0) + saldo_favor;
         }
 
+        const distInfo = procesarDistribuciones(v);
+
         return {
             id_solicitud: v.id_solicitud,
             codigo_ticket: v.codigo_ticket,
@@ -195,6 +285,7 @@ async function getReporteDiario({ id_llenadero, fecha_desde, fecha_hasta, hora_d
             total_pagar: canViewFinancialData ? v.monto_total : 0,
             moneda: canViewFinancialData ? simbolo : "",
             saldo_favor: canViewFinancialData ? saldo_favor.toFixed(2) : "0.00",
+            ...distInfo,
         };
     });
 
@@ -212,21 +303,25 @@ async function getReporteDiario({ id_llenadero, fecha_desde, fecha_hasta, hora_d
     };
 
     if (!tipo_reporte || tipo_reporte === 'INSTITUCIONAL' || tipo_reporte === 'TODOS') {
-        resultData.institucional = institucionalData.map((i) => ({
-            id_solicitud: i.id_solicitud,
-            codigo_ticket: i.codigo_ticket,
-            fecha: i.fecha_validacion,
-            hora: formatHora(i.fecha_validacion),
-            solicitante: `${i.Solicitante?.nombre} ${i.Solicitante?.apellido}`,
-            aprobador: i.Aprobador ? `${i.Aprobador.nombre} ${i.Aprobador.apellido}` : "S/A",
-            recibido: i.Receptor ? i.Receptor.nombre : "S/R",
-            ...formatVehiculo(i),
-            dependencia: i.Dependencia?.nombre_dependencia,
-            subdependencia: i.Subdependencia?.nombre,
-            tipo_combustible: i.TipoCombustible?.nombre || "S/I",
-            cant_solic: i.cantidad_litros,
-            cant_desp: i.cantidad_despachada,
-        }));
+        resultData.institucional = institucionalData.map((i) => {
+            const distInfo = procesarDistribuciones(i);
+            return {
+                id_solicitud: i.id_solicitud,
+                codigo_ticket: i.codigo_ticket,
+                fecha: i.fecha_validacion,
+                hora: formatHora(i.fecha_validacion),
+                solicitante: `${i.Solicitante?.nombre} ${i.Solicitante?.apellido}`,
+                aprobador: i.Aprobador ? `${i.Aprobador.nombre} ${i.Aprobador.apellido}` : "S/A",
+                recibido: i.Receptor ? i.Receptor.nombre : "S/R",
+                ...formatVehiculo(i),
+                dependencia: i.Dependencia?.nombre_dependencia,
+                subdependencia: i.Subdependencia?.nombre,
+                tipo_combustible: i.TipoCombustible?.nombre || "S/I",
+                cant_solic: i.cantidad_litros,
+                cant_desp: i.cantidad_despachada,
+                ...distInfo,
+            };
+        });
         resultData.totales.litros_institucional = (parseFloat(totalInstitucional) || 0).toFixed(2);
     }
 
@@ -239,6 +334,12 @@ async function getReporteDiario({ id_llenadero, fecha_desde, fecha_hasta, hora_d
             moneda, total: total.toFixed(2),
         })) : [];
     }
+
+    // Consolidado plano de todas las entregas internas de tickets maestros para auditoría y Excel
+    resultData.distribuciones = [
+        ...(resultData.institucional || []).flatMap((x) => x.distribuciones || []),
+        ...(resultData.venta || []).flatMap((x) => x.distribuciones || [])
+    ];
 
     return resultData;
 }
@@ -300,7 +401,7 @@ async function fetchDespachos(where, query) {
         ],
         attributes: [
             "id_solicitud", "codigo_ticket", "fecha_validacion",
-            "cantidad_litros", "cantidad_despachada", "tipo_suministro", "placa", "marca", "modelo",
+            "cantidad_litros", "cantidad_despachada", "tipo_suministro", "es_nodriza", "placa", "marca", "modelo",
             "id_aprobador", "id_receptor"
         ],
         order: [["fecha_validacion", "ASC"]],

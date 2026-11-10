@@ -23,8 +23,8 @@ async function generarKardexConsolidado({ fecha_desde, fecha_hasta, agruparPor =
   const entidades = await obtenerEntidadesActivas(agruparGlobalmente, llenaderosIds, combustiblesIds);
   if (!entidades.length) return [];
 
-  const stockBase = await obtenerStockInicialGlobal(`${fecha_desde} 00:00:00`, agruparGlobalmente, llenaderosIds, combustiblesIds);
-  const movimientosRaw = await obtenerMovimientosRango(`${fecha_desde} 00:00:00`, `${fecha_hasta} 23:59:59`, llenaderosIds, combustiblesIds);
+  const stockBase = await obtenerStockInicialGlobal(`${fecha_desde} 00:00:00-04:00`, agruparGlobalmente, llenaderosIds, combustiblesIds);
+  const movimientosRaw = await obtenerMovimientosRango(`${fecha_desde} 00:00:00-04:00`, `${fecha_hasta} 23:59:59-04:00`, llenaderosIds, combustiblesIds);
   
   const lineaTiempo = generarLineaTiempo(fecha_desde, fecha_hasta, agruparPor);
   const resultadoFinal = [];

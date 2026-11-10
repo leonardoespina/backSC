@@ -16,7 +16,7 @@ const originMiddleware = (req, res, next) => {
     try {
         const host = req.headers.host || '';
         const ip = req.ip || '';
-        
+
         // Normalizar IP (quitar prefijos de IPv6 y espacios)
         const clientIp = ip.replace(/^.*:/, '').trim();
 
@@ -26,7 +26,7 @@ const originMiddleware = (req, res, next) => {
         // 1. Detección Inteligente de Red Local (VPN/LAN) o IP Pública de la Sede
         const matchesInternal = INTERNAL_NETWORKS.some(segment => clientIp.startsWith(segment));
         const isPublicStation = clientIp === PUBLIC_GATEWAY_IP;
-        
+
         if (matchesInternal || isPublicStation || clientIp === '127.0.0.1' || clientIp === 'localhost') {
             gateway = isPublicStation ? 'LOCAL_VIA_PUBLIC' : 'LOCAL';
             isInternal = true;
@@ -98,15 +98,15 @@ const validateLlenaderoOrigin = (llenadero, clientIp, gateway) => {
             error.status = 403;
             throw error;
         }
-    } 
+    }
     // 2. Caso: Origen EXTERNO (Túnel desde fuera o IP pública desconocida)
     else {
         // En acceso externo, solo permitimos si la IP del cliente está explícitamente 
         // en la lista blanca del llenadero.
         if (!isIpInSegment(clientIp, configIp)) {
-             const error = new Error(`Acceso Remoto Bloqueado: El llenadero '${llenadero.nombre_llenadero}' solo permite operaciones desde su red local (${configIp}). Origen detectado: ${gateway} (${clientIp}).`);
-             error.status = 403;
-             throw error;
+            const error = new Error(`Acceso Remoto Bloqueado: El llenadero '${llenadero.nombre_llenadero}' solo permite operaciones desde su red local (${configIp}). Origen detectado: ${gateway} (${clientIp}).`);
+            error.status = 403;
+            throw error;
         }
     }
 };

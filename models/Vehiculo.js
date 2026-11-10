@@ -83,6 +83,7 @@ Vehiculo.associate = (models) => {
   Vehiculo.belongsTo(models.Dependencia, { foreignKey: "id_dependencia", as: "Dependencia" });
   Vehiculo.belongsTo(models.Subdependencia, { foreignKey: "id_subdependencia", as: "Subdependencia" });
   Vehiculo.belongsTo(models.TipoCombustible, { foreignKey: "id_tipo_combustible", as: "TipoCombustible" });
+  Vehiculo.hasMany(models.SolicitudDistribucion, { foreignKey: "id_vehiculo", as: "DistribucionesNodriza" });
 
   // Vehiculo.hasMany(models.CargaCisterna, { foreignKey: "id_vehiculo" });
   // Vehiculo.hasMany(models.Despacho, { foreignKey: "id_vehiculo" });

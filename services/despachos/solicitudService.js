@@ -1,5 +1,6 @@
 const {
   Solicitud,
+  SolicitudDistribucion,
   CupoActual,
   Subdependencia,
   Llenadero,
@@ -62,19 +63,19 @@ exports.createSolicitud = async (data, user, clientIp) => {
     }
 
     // --- Normalizar datos según tipo de suministro ---
-    // esBidon solo es true cuando es VENTA + BIDÓN (no requiere vehículo).
-    // INSTITUCIONAL + BIDÓN sí requiere vehículo y registra sus datos normalmente.
-    const esBidon =
-      tipo_suministro === TIPOS_SUMINISTRO.BIDON &&
-      tipo_solicitud === TIPOS_SOLICITUD.VENTA;
+    // esBidon: VENTA + BIDÓN, o INSTITUCIONAL + BIDÓN con es_nodriza cuando no se especifica vehículo de transporte.
+    const esNodriza = Boolean(data.es_nodriza);
+    const noRequiereVehiculo =
+      (tipo_suministro === TIPOS_SUMINISTRO.BIDON && tipo_solicitud === TIPOS_SOLICITUD.VENTA) ||
+      (tipo_suministro === TIPOS_SUMINISTRO.BIDON && esNodriza && !id_vehiculo);
 
-    const placaFinal = esBidon ? "NO APLICA" : placa;
-    const marcaFinal = esBidon ? "NO APLICA" : marca;
-    const modeloFinal = esBidon ? "NO APLICA" : modelo;
-    const idVehiculoFinal = esBidon ? null : id_vehiculo;
+    const placaFinal = noRequiereVehiculo ? "NO APLICA" : (placa || "NO APLICA");
+    const marcaFinal = noRequiereVehiculo ? "NO APLICA" : (marca || "NO APLICA");
+    const modeloFinal = noRequiereVehiculo ? "NO APLICA" : (modelo || "NO APLICA");
+    const idVehiculoFinal = noRequiereVehiculo ? null : id_vehiculo;
 
-    // Validar placa presente para solicitudes que requieren vehículo (REGULAR o INSTITUCIONAL+BIDÓN)
-    if (!esBidon && !placa) {
+    // Validar placa presente para solicitudes que requieren vehículo
+    if (!noRequiereVehiculo && !placa) {
       throw new Error("La placa del vehículo es requerida");
     }
 
@@ -228,13 +229,14 @@ exports.createSolicitud = async (data, user, clientIp) => {
         placa: placaFinal,
         marca: marcaFinal,
         modelo: modeloFinal,
-        flota: esBidon ? null : flota,
+        flota: noRequiereVehiculo ? null : flota,
         id_llenadero,
         id_tipo_combustible,
         cantidad_litros: parseFloat(cantidad_litros),
         cantidad_despachada: null,
         tipo_suministro,
         tipo_solicitud,
+        es_nodriza: esNodriza,
         id_precio,
         precio_unitario,
         monto_total,
@@ -421,6 +423,12 @@ exports.listarSolicitudes = async (query, user) => {
       { model: Subdependencia, as: "Subdependencia", attributes: ["nombre"] },
       { model: TipoCombustible, attributes: ["nombre"], where: { activo: true }, required: false },
       { model: Llenadero, attributes: ["nombre_llenadero"] },
+      {
+        model: SolicitudDistribucion,
+        as: "Distribuciones",
+        attributes: ["id_distribucion", "cantidad_litros", "id_vehiculo"],
+        required: false,
+      },
     ],
     order,
   });

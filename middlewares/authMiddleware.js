@@ -9,9 +9,17 @@ const autenticarUsuario = async (req, res, next) => {
     return res.status(401).json({ msg: "No hay token, permiso denegado" });
   }
 
+  // 1. Validar el token JWT de forma aislada
+  let decoded;
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch (error) {
+    console.error("Error al verificar JWT en authMiddleware:", error.message);
+    return res.status(401).json({ msg: "Token no válido o expirado" });
+  }
 
+  // 2. Realizar las consultas de base de datos con manejo de error 500
+  try {
     // CONTROL DE SESIÓN ÚNICA - Validar id_sesion contra la BD
     const usuarioBD = await Usuario.findByPk(decoded.id_usuario, {
       attributes: [
@@ -56,8 +64,10 @@ const autenticarUsuario = async (req, res, next) => {
       usuario: req.usuario,
     }, next);
   } catch (error) {
-    console.error("Error en authMiddleware:", error.message);
-    res.status(401).json({ msg: "Token no válido" });
+    console.error("Error de base de datos en authMiddleware:", error);
+    // Para errores de base de datos o timeout por mala conexión, retornar 500
+    // para que el frontend muestre error del servidor pero NO cierre la sesión
+    return res.status(500).json({ msg: "Error al validar la sesión en la base de datos (Problema de conexión). Reintente." });
   }
 };
 

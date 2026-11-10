@@ -64,4 +64,7 @@ router.post(
   solicitudController.anularSolicitudFinalizada
 );
 
+// Módulo de Distribución Nodriza
+router.use("/", require("./distribucionRoutes"));
+
 module.exports = router;

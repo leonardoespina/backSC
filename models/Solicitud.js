@@ -76,6 +76,12 @@ const Solicitud = sequelize.define(
       type: DataTypes.ENUM("REGULAR", "BIDON"),
       allowNull: false,
     },
+    es_nodriza: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: "TRUE si el despacho a granel/bidón requiere distribución interna posterior",
+    },
     tipo_solicitud: {
       type: DataTypes.ENUM("INSTITUCIONAL", "VENTA"),
       allowNull: false,
@@ -214,6 +220,13 @@ Solicitud.associate = (models) => {
 
   // Cierre de Turno (lote al que pertenece el despacho)
   Solicitud.belongsTo(models.CierreTurno, { foreignKey: "id_cierre_turno", as: "CierreTurno" });
+
+  // Distribución interna para tickets nodriza
+  Solicitud.hasMany(models.SolicitudDistribucion, {
+    foreignKey: "id_solicitud",
+    as: "Distribuciones",
+    onDelete: "CASCADE",
+  });
 };
 
 module.exports = Solicitud;

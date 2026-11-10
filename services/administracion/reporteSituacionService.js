@@ -33,7 +33,17 @@ async function getSituacionCombustible({ start, end, fecha_desde, fecha_hasta } 
             "id_llenadero",
             "id_tipo_combustible",
             [fn("SUM", col("capacidad_maxima")), "capacidad_total"],
-            [fn("SUM", col("nivel_actual")),     "stock_actual"],
+            [
+                literal(`SUM(COALESCE((
+                    SELECT mi.volumen_despues 
+                    FROM movimientos_inventario mi 
+                    WHERE mi.id_tanque = "Tanque"."id_tanque" 
+                    AND mi.fecha_movimiento < '${end}' 
+                    ORDER BY mi.fecha_movimiento DESC, mi.id_movimiento DESC 
+                    LIMIT 1
+                ), 0))`),
+                "stock_actual"
+            ],
         ],
         include: [
             { model: Llenadero,       as: "Llenadero",       attributes: ["nombre_llenadero"] },
